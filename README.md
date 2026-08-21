@@ -153,8 +153,11 @@ Validated example output is summarized in [examples/example_analysis.md](example
 
 For complete operational documentation, see:
 
-- [Project implementation report](docs/project_report.md)
 - [End-user guide and interface reference](docs/user_guide.md)
+- [macOS setup guide](docs/macos_setup.md)
+- [Architecture and trust boundaries](docs/architecture.md)
+- [Financial-data methodology](docs/methodology.md)
+- [Evaluation methodology and results](docs/evaluation.md)
 
 ## Financial data methodology
 

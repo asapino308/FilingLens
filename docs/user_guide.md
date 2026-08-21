@@ -570,15 +570,6 @@ Use it when explaining how a displayed value or AI answer was produced. More det
 3. Confirm that the top passages come from Risk Factors or relevant Business/MD&A sections.
 4. Read the original SEC filing for complete context.
 
-### Create a portfolio demonstration
-
-1. Analyze two companies with different industries.
-2. Capture screenshots that do not expose private settings.
-3. Export one reviewed analyst brief.
-4. Cite the official SEC filings.
-5. Explain the deterministic-versus-generative separation.
-6. State the project's limitations honestly.
-
 ## 17. Caching and data freshness
 
 FilingLens has two cache layers:
