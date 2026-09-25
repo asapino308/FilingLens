@@ -91,7 +91,7 @@ Run the built-in diagnostic before first launch:
 .venv/bin/python scripts/doctor.py
 ```
 
-Manual installation and troubleshooting are covered in [the Mac setup guide](docs/macos_setup.md) and [the complete user guide](docs/user_guide.md).
+Manual source installation and troubleshooting are covered in [the Mac source setup guide](docs/macos_setup.md) and [the Streamlit user guide](docs/user_guide.md).
 
 ## Source configuration
 
@@ -123,7 +123,7 @@ The SEC requests an identifiable automated-access header. Replace the example ad
 
 `AI_PROVIDER=auto` checks LM Studio, local Ollama, Ollama Cloud, OpenAI, and Anthropic. Set it to `lmstudio`, `ollama`, `ollama_cloud`, `openai`, or `anthropic` to force one service. Model fields may remain blank so FilingLens can discover available text models. The older `LOCAL_LLM_PROVIDER` variable remains accepted for backward compatibility.
 
-### Option A: LM Studio (recommended for a visual Mac workflow)
+### Option A: LM Studio
 
 1. Install [LM Studio](https://lmstudio.ai/download) and open it once.
 2. Download and load an instruction-tuned model that fits your Mac's available memory.
@@ -194,7 +194,7 @@ Validated example output is summarized in [examples/example_analysis.md](example
 For complete operational documentation, see:
 
 - [Desktop app guide](docs/desktop_app.md)
-- [End-user guide and interface reference](docs/user_guide.md)
+- [Streamlit source guide and interface reference](docs/user_guide.md)
 
 ## Financial data methodology
 
