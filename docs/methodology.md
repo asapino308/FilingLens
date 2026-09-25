@@ -12,6 +12,10 @@ Annual observations are grouped by the period end year because the Company Facts
 
 Only USD facts are currently selected for statement values. Dimensional and issuer-extension reconciliation is intentionally conservative. Missing mappings remain unavailable.
 
+## Latest 10-Q snapshot
+
+The desktop app also selects facts tied to the exact accession and report date of the latest 10-Q. Income statement values must cover roughly three months. Balance-sheet values are point-in-time at the quarter end. Cash-flow values are labeled fiscal year to date and use the longest eligible duration in that filing. Concept priority follows the annual mapping. This snapshot is displayed separately from annual history; unavailable or ambiguous values are omitted rather than inferred.
+
 ## Normalized schema
 
 The long table includes ticker, company name, CIK, form, accession, filing date, fiscal year label, fiscal period, start, end, normalized metric, value, unit, and XBRL concept. A pandas pivot creates one row per annual period for analytics and presentation.
@@ -30,7 +34,7 @@ The statistical method applies `0.6745 × (x − median) / MAD` to the percentag
 
 ## Filing parsing and retrieval
 
-Beautiful Soup removes scripts, styles, navigation, and repeated adjacent lines. Regex patterns look for the latest occurrence of standard 10-K and 10-Q headings to avoid table-of-contents matches. When recognition fails, the full cleaned filing is preserved under an explicit fallback label.
+Beautiful Soup removes scripts, styles, navigation, and repeated adjacent lines. Regex patterns look for the latest occurrence of standard 10-K and 10-Q headings to avoid table-of-contents matches. When recognition fails, the full cleaned filing is preserved under an explicit fallback label. Desktop reading and Q&A select one form at a time. The desktop analyst brief retrieves passages from both latest forms when available and labels each passage with its form and source URL.
 
 Sections are split into approximately 450-word windows with 60-word overlap. Exact duplicate windows are removed. Each chunk keeps company, ticker, form, filed date, section, accession, URL, and a stable per-filing chunk ID.
 
@@ -44,7 +48,9 @@ Only transaction codes `P` and `S` are summarized as open-market/private purchas
 
 ## Local language generation
 
-At startup, FilingLens asks the selected local service for its actual model list: LM Studio uses `GET /v1/models`, while Ollama uses `GET /api/tags`. Likely embedding models are removed from the chat selector. Filing Q&A and analyst briefs use the provider's native local chat endpoint—LM Studio `/api/v1/chat` or Ollama `/api/chat`—with reasoning disabled. This preserves the output budget for visible answers and captures token statistics when the service supplies them. Filing Q&A first applies a conservative deterministic scope check to avoid model calls for clearly unrelated questions, price predictions, and buy/sell recommendations.
+At startup, FilingLens asks each enabled provider for its actual model list: LM Studio uses `GET /v1/models`; local Ollama and Ollama Cloud use `GET /api/tags`. Ollama Cloud requests use `https://ollama.com/api` with a Bearer API key. Likely embedding models are removed from the selector. Overview Q&A, filing Q&A, and analyst briefs use the provider's native chat endpoint—LM Studio `/api/v1/chat` or Ollama `/api/chat`—with reasoning disabled where supported. This preserves the output budget for visible answers and captures token statistics when supplied. Q&A first applies a conservative deterministic scope check to avoid calls for clearly unrelated questions, price predictions, and buy/sell recommendations.
+
+The Financials composition view selects entity-wide US-GAAP income facts from the exact 10-K or 10-Q accession and reporting period. It reads dimension-tagged revenue from that filing's inline XBRL. Product, segment, and geography groups are displayed separately only when a nonoverlapping subset sums to the reported revenue within a narrow rounding tolerance. The view never combines a three-month quarter with fiscal-year-to-date or annual figures. Calculated bridge rows and unmapped operating-expense remainders are labeled; missing or overlapping details are omitted.
 
 The system prompt states that retrieved documents are evidence only and must never be followed as instructions. It requires supplied evidence, explicit insufficiency, numeric preservation, source markers, calculation/commentary separation, and responsible-use language.
 

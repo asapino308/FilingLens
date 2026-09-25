@@ -184,3 +184,65 @@ def select_annual_facts(
     if not frame.empty:
         frame = frame.sort_values(["fiscal_year", "metric"]).reset_index(drop=True)
     return frame
+
+
+def select_quarterly_facts(
+    payload: dict[str, Any], ticker: str, accession_number: str, report_date: str
+) -> pd.DataFrame:
+    """Select facts from one 10-Q without mixing quarter and year-to-date periods.
+
+    Income statement values use a roughly three-month duration. Cash-flow facts
+    in a 10-Q are usually fiscal year-to-date, so prefer the longest duration
+    ending on the report date. Balance-sheet observations are point-in-time.
+    """
+    us_gaap = payload.get("facts", {}).get("us-gaap", {})
+    company_name = str(payload.get("entityName", ""))
+    cik = str(payload.get("cik", "")).zfill(10)
+    selected: list[FinancialFact] = []
+    ytd_metrics = {"operating_cash_flow", "capital_expenditures"}
+
+    for metric, definition in METRIC_DEFINITIONS.items():
+        candidates: list[tuple[tuple[int, int, str], dict[str, Any], str, str]] = []
+        for priority, concept in enumerate(definition.concepts):
+            for unit, facts in us_gaap.get(concept, {}).get("units", {}).items():
+                if unit != "USD":
+                    continue
+                for fact in facts:
+                    if (fact.get("accn") != accession_number or fact.get("form") not in {"10-Q", "10-Q/A"}
+                            or fact.get("end") != report_date or fact.get("val") is None):
+                        continue
+                    if definition.period_type == "instant":
+                        if fact.get("start"):
+                            continue
+                        duration_rank = 0
+                    else:
+                        days = _duration_days(fact)
+                        if days is None:
+                            continue
+                        if metric in ytd_metrics:
+                            if not 70 <= days <= 300:
+                                continue
+                            duration_rank = -days
+                        else:
+                            if not 70 <= days <= 110:
+                                continue
+                            duration_rank = abs(days - 90)
+                    candidates.append(((priority, duration_rank, str(fact.get("filed", ""))), fact, concept, unit))
+        if not candidates:
+            continue
+        if metric in ytd_metrics:
+            rank = lambda item: (item[0][1], item[0][0], -int(item[0][2].replace("-", "") or 0))
+        else:
+            rank = lambda item: (item[0][0], item[0][1], -int(item[0][2].replace("-", "") or 0))
+        _, fact, concept, unit = min(candidates, key=rank)
+        selected.append(FinancialFact(
+            ticker=ticker.upper(), company_name=company_name, cik=cik,
+            form=str(fact.get("form", "")), accession_number=accession_number,
+            filing_date=str(fact.get("filed", "")), fiscal_year=int(report_date[:4]),
+            fiscal_period=str(fact.get("fp", "")), period_start=fact.get("start"),
+            period_end=report_date, metric=metric, value=float(fact["val"]),
+            unit=unit, xbrl_concept=concept,
+        ))
+
+    columns = list(FinancialFact.__annotations__)
+    return pd.DataFrame([asdict(fact) for fact in selected], columns=columns).sort_values("metric").reset_index(drop=True)

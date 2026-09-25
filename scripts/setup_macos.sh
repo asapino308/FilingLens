@@ -29,15 +29,16 @@ echo "Using $($PYTHON_BIN --version)"
 .venv/bin/python -m pip install -e "$INSTALL_TARGET"
 
 if [[ ! -f .env ]]; then
-  cp .env.example .env
+  install -m 600 .env.example .env
   echo "Created .env from the safe example."
 else
+  chmod 600 .env
   echo "Kept your existing .env file."
 fi
 
 echo
 echo "Installation complete."
 echo "1. Open .env and replace your-email@example.com with a monitored contact email."
-echo "2. Optionally start LM Studio or Ollama for local AI features."
+echo "2. Choose an optional AI service: LM Studio, local Ollama, or Ollama Cloud."
 echo "3. Run: .venv/bin/python scripts/doctor.py"
 echo "4. Launch with: .venv/bin/python -m streamlit run app.py"

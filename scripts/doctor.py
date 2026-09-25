@@ -26,9 +26,12 @@ def load_simple_env(path: Path) -> dict[str, str]:
     return values
 
 
-def fetch_json_status(url: str) -> tuple[bool, str]:
+def fetch_json_status(
+    url: str, headers: dict[str, str] | None = None
+) -> tuple[bool, str]:
     try:
-        with urllib.request.urlopen(url, timeout=2) as response:
+        request = urllib.request.Request(url, headers=headers or {})
+        with urllib.request.urlopen(request, timeout=2) as response:
             if 200 <= response.status < 300:
                 return True, f"reachable ({response.status})"
             return False, f"HTTP {response.status}"
@@ -67,9 +70,13 @@ def main() -> int:
         else:
             print("[OK] SEC_USER_AGENT is configured (value not displayed).")
 
-    provider = env.get("LOCAL_LLM_PROVIDER", "auto").lower()
-    if provider not in {"auto", "lmstudio", "ollama"}:
-        print("[FAIL] LOCAL_LLM_PROVIDER must be auto, lmstudio, or ollama.")
+    provider = env.get(
+        "AI_PROVIDER", env.get("LOCAL_LLM_PROVIDER", "auto")
+    ).lower()
+    if provider not in {"auto", "lmstudio", "ollama", "ollama_cloud"}:
+        print(
+            "[FAIL] AI_PROVIDER must be auto, lmstudio, ollama, or ollama_cloud."
+        )
         failures += 1
 
     lmstudio_base = env.get("LMSTUDIO_BASE_URL", "http://127.0.0.1:1234/v1").rstrip("/")
@@ -77,9 +84,31 @@ def main() -> int:
     lm_ok, lm_message = fetch_json_status(f"{lmstudio_base}/models")
     ol_ok, ol_message = fetch_json_status(f"{ollama_base}/api/tags")
     print(f"[{'OK' if lm_ok else 'WARN'}] LM Studio: {lm_message}")
-    print(f"[{'OK' if ol_ok else 'WARN'}] Ollama: {ol_message}")
-    if not lm_ok and not ol_ok:
-        print("[WARN] No local AI service detected. Financial and retrieval features still work.")
+    print(f"[{'OK' if ol_ok else 'WARN'}] Ollama (local): {ol_message}")
+
+    cloud_key = env.get("OLLAMA_API_KEY", "")
+    cloud_base = (
+        env.get("OLLAMA_CLOUD_BASE_URL", "https://ollama.com")
+        .rstrip("/")
+        .removesuffix("/api")
+    )
+    cloud_ok = False
+    if cloud_key:
+        cloud_ok, cloud_message = fetch_json_status(
+            f"{cloud_base}/api/tags",
+            headers={"Authorization": f"Bearer {cloud_key}"},
+        )
+        print(
+            f"[{'OK' if cloud_ok else 'WARN'}] Ollama Cloud key configured; "
+            f"API is {cloud_message} (key not displayed)."
+        )
+    else:
+        print("[WARN] Ollama Cloud: OLLAMA_API_KEY is not configured.")
+
+    if not lm_ok and not ol_ok and not cloud_ok:
+        print(
+            "[WARN] No AI service detected. Financial and retrieval features still work."
+        )
         warnings += 1
 
     cache_dir = ROOT / "data" / "cache"

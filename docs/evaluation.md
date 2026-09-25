@@ -37,7 +37,7 @@ The initial analyst-brief run exposed an important failure: the model used outpu
 
 ### Automated tests
 
-The final suite contains 104 passing tests with 85% package coverage. It covers SEC headers, request throttling, cache behavior, retries, ticker normalization, submissions, annual fact filtering, duplicate/restatement handling, comparative-period labeling, debt mapping, statements, ratios, zero denominators, negative equity, anomaly thresholds, parsing, section fallback, chunk metadata, retrieval ranking, LM Studio and Ollama discovery/generation/offline behavior, prompt isolation, exports, and evaluation helpers.
+The current suite contains 139 passing tests. Package coverage was not remeasured for this release. It covers SEC headers, request throttling, cache behavior, retries, ticker normalization, submissions, annual fact filtering, duplicate/restatement handling, comparative-period labeling, debt mapping, statements, ratios, zero denominators, negative equity, anomaly thresholds, parsing, section fallback, chunk metadata, retrieval ranking, LM Studio and Ollama discovery/generation/offline behavior, prompt isolation, exports, and evaluation helpers.
 
 Ollama compatibility is validated with mocked native `/api/tags` and `/api/chat` responses, including model filtering, explicit reasoning control, token statistics, invalid configuration, timeout handling, and offline behavior. The live performance figures below remain LM Studio-specific and are not presented as an Ollama benchmark.
 

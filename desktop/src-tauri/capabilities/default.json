@@ -1,0 +1,17 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "FilingLens desktop window permissions",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        {"url": "https://www.sec.gov/Archives/*"},
+        {"url": "https://data.sec.gov/api/xbrl/*"},
+        {"url": "https://data.sec.gov/submissions/*"}
+      ]
+    }
+  ]
+}

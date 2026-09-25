@@ -18,9 +18,9 @@ import pandas as pd
 import streamlit as st
 
 from filinglens.analytics.anomalies import detect_anomalies
-from filinglens.analytics.normalize import financials_wide, statement_table
+from filinglens.analytics.normalize import financials_wide
 from filinglens.analytics.ratios import calculate_ratios
-from filinglens.config import Settings
+from filinglens.config import PROJECT_ROOT, Settings, save_env_value
 from filinglens.documents.chunking import chunk_sections
 from filinglens.documents.parser import clean_filing_html
 from filinglens.documents.retrieval import LocalRetriever
@@ -29,20 +29,29 @@ from filinglens.llm.analyst_brief import generate_analyst_brief
 from filinglens.llm.base import LLMProvider, LocalLLMError
 from filinglens.llm.grounded_qa import ask_filing
 from filinglens.llm.lmstudio import LMStudioProvider
-from filinglens.llm.ollama import OllamaProvider
+from filinglens.llm.cloud import CloudProvider
+from filinglens.llm.ollama import OllamaProvider, free_credit_cloud_models
 from filinglens.reporting.export import markdown_to_html
 from filinglens.sec.client import SECClient, SECClientError
+from filinglens.sec.csv_export import safe_csv
 from filinglens.sec.companies import CompanyDirectory
 from filinglens.sec.insiders import fetch_insider_activity
 from filinglens.sec.submissions import latest_filing
 from filinglens.sec.xbrl import select_annual_facts
-from filinglens.ui.charts import financial_trend_chart, ratio_trend_chart
+from filinglens.ui.charts import account_trend_chart
 from filinglens.ui.components import (
     ANOMALY_COLOR_MODES,
+    LABELS,
+    METRIC_FORMULAS,
     anomaly_display_table,
     anomaly_summary_text,
-    format_ratio_table,
     human_currency,
+    metric_component_table,
+    metric_display_value,
+    metric_latest_change,
+    metric_trend_table,
+    period_delta,
+    ratio_display,
     synchronize_filing_session,
     verified_metrics_text,
 )
@@ -122,11 +131,35 @@ def build_retriever(company: object, filing: object, html: str) -> tuple[LocalRe
     return LocalRetriever(chunks), sections
 
 
+def get_or_build_retriever(
+    company: object, filing: object, refresh_nonce: int
+) -> LocalRetriever:
+    """Reuse the current filing index or build it once for any AI feature."""
+    is_current = (
+        st.session_state.get("retrieval_accession") == filing.accession_number
+        and st.session_state.get("retrieval_ticker") == company.ticker
+        and st.session_state.get("retrieval") is not None
+    )
+    if is_current:
+        return st.session_state.retrieval
+
+    html = load_filing_text(filing.source_url, refresh_nonce)
+    retriever, sections = build_retriever(company, filing, html)
+    st.session_state.retrieval = retriever
+    st.session_state.sections = sections
+    st.session_state.retrieval_accession = filing.accession_number
+    st.session_state.retrieval_ticker = company.ticker
+    return retriever
+
+
 def provider_states(
     settings: Settings,
+    ollama_cloud_api_key: str = "",
+    openai_api_key: str = "",
+    anthropic_api_key: str = "",
 ) -> dict[str, tuple[LLMProvider, list[str], str, str]]:
     candidates: dict[str, tuple[LLMProvider, str, str]] = {
-        "LM Studio": (
+        "LM Studio (local)": (
             LMStudioProvider(
                 settings.lmstudio_base_url,
                 settings.lmstudio_model,
@@ -136,7 +169,7 @@ def provider_states(
             settings.lmstudio_model,
             settings.lmstudio_base_url,
         ),
-        "Ollama": (
+        "Ollama (local)": (
             OllamaProvider(
                 settings.ollama_base_url,
                 settings.ollama_model,
@@ -145,27 +178,159 @@ def provider_states(
             settings.ollama_model,
             settings.ollama_base_url,
         ),
+        "Ollama Cloud": (
+            OllamaProvider(
+                settings.ollama_cloud_base_url,
+                settings.ollama_cloud_model,
+                api_key=ollama_cloud_api_key or settings.ollama_api_key,
+                cloud=True,
+                timeout=settings.ollama_cloud_timeout_seconds,
+            ),
+            settings.ollama_cloud_model,
+            settings.ollama_cloud_base_url,
+        ),
+        "OpenAI": (
+            CloudProvider("openai", openai_api_key or settings.openai_api_key, settings.openai_model),
+            settings.openai_model,
+            "https://api.openai.com/v1",
+        ),
+        "Anthropic": (
+            CloudProvider("anthropic", anthropic_api_key or settings.anthropic_api_key, settings.anthropic_model),
+            settings.anthropic_model,
+            "https://api.anthropic.com/v1",
+        ),
     }
     if settings.local_llm_provider == "lmstudio":
-        candidates = {"LM Studio": candidates["LM Studio"]}
+        candidates = {"LM Studio (local)": candidates["LM Studio (local)"]}
     elif settings.local_llm_provider == "ollama":
-        candidates = {"Ollama": candidates["Ollama"]}
+        candidates = {"Ollama (local)": candidates["Ollama (local)"]}
+    elif settings.local_llm_provider == "ollama_cloud":
+        candidates = {"Ollama Cloud": candidates["Ollama Cloud"]}
+    elif settings.local_llm_provider in {"openai", "anthropic"}:
+        name = settings.local_llm_provider.title()
+        candidates = {name: candidates[name]}
 
     states: dict[str, tuple[LLMProvider, list[str], str, str]] = {}
     for name, (provider, configured_model, endpoint) in candidates.items():
         try:
             models = provider.list_models()
             status = f"Connected - {len(models)} model(s)"
-        except LocalLLMError:
+        except LocalLLMError as exc:
             models = []
-            status = f"{name} was not detected at {endpoint}."
+            status = str(exc) or f"{name} was not detected at {endpoint}."
         states[name] = (provider, models, status, configured_model)
     return states
 
 
+def render_metric_group(
+    title: str,
+    frame: pd.DataFrame,
+    metrics: list[str],
+    *,
+    key: str,
+    ratio: bool = False,
+    component_frame: pd.DataFrame | None = None,
+) -> None:
+    """Render a readable account table with row-selectable trend detail."""
+    display = metric_trend_table(frame, metrics, ratio=ratio)
+    st.markdown(f"#### {title}")
+    if display.empty:
+        st.info("No reliable mapped values are available for this section.")
+        return
+
+    visible_columns = [column for column in display.columns if column != "_metric"]
+    column_config: dict[str, object] = {
+        "Account": st.column_config.TextColumn("Account", width="large"),
+        "Trend": st.column_config.LineChartColumn("Trend", width="medium"),
+        "Latest change": st.column_config.TextColumn(
+            "Latest change", width="small"
+        ),
+    }
+    for column in visible_columns:
+        if column.startswith("FY"):
+            column_config[column] = st.column_config.TextColumn(column, width="small")
+
+    event = st.dataframe(
+        display,
+        column_order=visible_columns,
+        column_config=column_config,
+        width="stretch",
+        hide_index=True,
+        height=min(390, 40 + 36 * len(display)),
+        on_select="rerun",
+        selection_mode="single-row",
+        key=f"statement_table_{key}",
+    )
+    selected_rows = list(event.selection.rows)
+    if not selected_rows:
+        st.caption("Select an account row to expand its values and full trend chart.")
+        return
+
+    selected_row = display.iloc[selected_rows[0]]
+    metric = str(selected_row["_metric"])
+    label = str(selected_row["Account"])
+    series = pd.to_numeric(frame[metric], errors="coerce").dropna()
+    with st.expander(f"{label} detail", expanded=True):
+        detail_columns = st.columns([1, 1, 1, 3])
+        latest_value = float(series.iloc[-1]) if not series.empty else None
+        prior_value = float(series.iloc[-2]) if len(series) > 1 else None
+        detail_columns[0].metric(
+            f"FY{int(series.index[-1])}" if not series.empty else "Latest",
+            metric_display_value(metric, latest_value, ratio=ratio),
+        )
+        detail_columns[1].metric(
+            f"FY{int(series.index[-2])}" if len(series) > 1 else "Prior",
+            metric_display_value(metric, prior_value, ratio=ratio),
+        )
+        detail_columns[2].metric(
+            "Latest change", metric_latest_change(frame, metric, ratio=ratio)
+        )
+        detail_columns[3].plotly_chart(
+            account_trend_chart(
+                frame,
+                metric,
+                LABELS.get(metric, label),
+                ratio=ratio,
+                multiple=ratio and metric in {"current_ratio", "debt_to_equity"},
+            ),
+            width="stretch",
+            key=f"statement_chart_{key}_{metric}",
+        )
+        latest_year = int(series.index[-1]) if not series.empty else None
+        source_frame = component_frame if component_frame is not None else frame
+        component_table = (
+            metric_component_table(source_frame, metric, latest_year)
+            if latest_year is not None
+            else pd.DataFrame()
+        )
+        st.markdown("**Composition or calculation**")
+        if metric in METRIC_FORMULAS:
+            st.caption(f"Formula: {METRIC_FORMULAS[metric]}")
+        if not component_table.empty:
+            st.dataframe(
+                component_table,
+                width="stretch",
+                hide_index=True,
+                key=f"statement_components_{key}_{metric}",
+            )
+        else:
+            st.caption(
+                "No reliable lower-level component breakdown is available in FilingLens's "
+                "normalized SEC Company Facts for this account. The reported total remains "
+                "visible without estimated components."
+            )
+        st.caption(
+            "Annual values are calculated from FilingLens's normalized SEC/XBRL series. "
+            "Open Value provenance on the Overview tab to inspect the exact source concept."
+        )
+
+
 settings = Settings.from_env()
 st.title("FilingLens")
-st.caption("Local SEC filing intelligence · Deterministic financial analytics · Educational use only")
+st.caption(
+    "SEC filing intelligence · Deterministic financial analytics · Local or Ollama Cloud AI · "
+    "Educational use only"
+)
 
 with st.sidebar:
     st.header("Company")
@@ -177,26 +342,147 @@ with st.sidebar:
         st.session_state.refresh_nonce += 1
         st.cache_data.clear()
     st.divider()
-    st.header("Local AI")
-    local_states = provider_states(settings)
+    st.header("AI provider")
+    with st.expander("Add Ollama Cloud API key"):
+        st.caption(
+            "Paste an Ollama API key here to connect without editing files or using Terminal. "
+            "The key is hidden while you type."
+        )
+        pasted_cloud_key = st.text_input(
+            "Ollama Cloud API key",
+            type="password",
+            value="",
+            placeholder="Paste your Ollama key",
+            key="ollama_cloud_key_input",
+        )
+        session_cloud_key = st.session_state.get("ollama_cloud_api_key", "")
+        key_buttons = st.columns(2)
+        if key_buttons[0].button(
+            "Connect for this session",
+            disabled=not pasted_cloud_key.strip(),
+            width="stretch",
+        ):
+            st.session_state.ollama_cloud_api_key = pasted_cloud_key.strip()
+            st.rerun()
+        if key_buttons[1].button(
+            "Save on this Mac",
+            disabled=not pasted_cloud_key.strip(),
+            width="stretch",
+        ):
+            try:
+                save_env_value(
+                    PROJECT_ROOT / ".env",
+                    "OLLAMA_API_KEY",
+                    pasted_cloud_key.strip(),
+                )
+                st.session_state.ollama_cloud_api_key = pasted_cloud_key.strip()
+                st.session_state.ollama_cloud_key_saved = True
+                st.rerun()
+            except OSError as exc:
+                st.error(f"The key could not be saved on this Mac: {exc}")
+        if st.session_state.get("ollama_cloud_key_saved"):
+            st.success("Ollama Cloud key saved privately on this Mac.")
+        elif session_cloud_key:
+            st.success("Ollama Cloud key is active for this browser session.")
+        elif settings.ollama_api_key:
+            st.success("An Ollama Cloud key is already saved on this Mac.")
+        st.caption(
+            "Saving writes only to this project's Git-ignored .env file with owner-only "
+            "permissions. The key is sent only to Ollama when cloud access is used."
+        )
+
+    for provider_label, env_name in (("OpenAI", "OPENAI_API_KEY"), ("Anthropic", "ANTHROPIC_API_KEY")):
+        session_name = env_name.lower()
+        with st.expander(f"Add {provider_label} API key"):
+            pasted_key = st.text_input(f"{provider_label} API key", type="password", value="",
+                                       key=f"{session_name}_input")
+            buttons = st.columns(2)
+            if buttons[0].button("Connect for this session", disabled=not pasted_key.strip(),
+                                 key=f"{session_name}_connect", width="stretch"):
+                st.session_state[session_name] = pasted_key.strip()
+                st.rerun()
+            if buttons[1].button("Save on this Mac", disabled=not pasted_key.strip(),
+                                 key=f"{session_name}_save", width="stretch"):
+                try:
+                    save_env_value(PROJECT_ROOT / ".env", env_name, pasted_key.strip())
+                    st.session_state[session_name] = pasted_key.strip()
+                    st.rerun()
+                except OSError as exc:
+                    st.error(f"The key could not be saved: {exc}")
+            if st.session_state.get(session_name) or getattr(settings, session_name):
+                st.success(f"{provider_label} key is available.")
+            st.caption("Saved keys go to this project's Git-ignored .env file with owner-only permissions.")
+
+    active_cloud_key = st.session_state.get("ollama_cloud_api_key", "")
+    local_states = provider_states(settings, active_cloud_key,
+                                   st.session_state.get("openai_api_key", ""),
+                                   st.session_state.get("anthropic_api_key", ""))
     available_providers = [name for name, state in local_states.items() if state[1]]
     if available_providers:
-        provider_name = st.selectbox("Local AI provider", available_providers)
+        provider_state_key = "selected_ai_provider"
+        if st.session_state.get(provider_state_key) not in available_providers:
+            st.session_state[provider_state_key] = available_providers[0]
+        provider_name = st.selectbox(
+            "AI provider", available_providers, key=provider_state_key
+        )
         provider, models, llm_status, configured_model = local_states[provider_name]
-        default_model = configured_model if configured_model in models else models[0]
-        model = st.selectbox("Local model", models, index=models.index(default_model))
+        selectable_models = models
+        if provider_name == "Ollama Cloud":
+            free_models = free_credit_cloud_models(models)
+            show_paid_models = st.checkbox(
+                "Show models that may require paid credits",
+                value=False,
+                key="show_paid_ollama_models",
+                help=(
+                    "Off shows only the Ollama Cloud models currently included with free "
+                    "usage credits. Turn it on after adding credits or upgrading."
+                ),
+            )
+            if free_models and not show_paid_models:
+                selectable_models = free_models
+                st.caption(
+                    f"Showing {len(free_models)} free-credit Ollama Cloud model(s)."
+                )
+            elif not free_models and not show_paid_models:
+                st.warning(
+                    "None of the known free-credit models appeared in Ollama's model list. "
+                    "All returned models are shown so you can inspect availability."
+                )
+
+        model_state_key = (
+            "selected_model_" + provider_name.lower().replace(" ", "_").replace("(", "").replace(")", "")
+        )
+        default_model = (
+            configured_model
+            if configured_model in selectable_models
+            else selectable_models[0]
+        )
+        if st.session_state.get(model_state_key) not in selectable_models:
+            st.session_state[model_state_key] = default_model
+        model = st.selectbox(
+            "AI model", selectable_models, key=model_state_key
+        )
         st.success(f"{provider_name}: {llm_status}")
+        if provider_name in {"Ollama Cloud", "OpenAI", "Anthropic"}:
+            st.warning(
+                "Cloud mode sends your question, verified metrics, and selected SEC filing "
+                f"passages to {provider_name}. API usage may incur charges."
+            )
     else:
         provider_name = None
         provider = next(iter(local_states.values()))[0]
         models = []
         model = None
-        llm_status = "No configured local AI service was detected."
+        llm_status = "No configured AI provider exposed an available chat model."
         st.warning(llm_status)
         st.caption(
-            "Start LM Studio or Ollama and make a chat model available. Deterministic features "
-            "remain available."
+            "Start LM Studio/local Ollama, or add a cloud provider key above. "
+            "Deterministic features remain available."
         )
+    with st.expander("Provider status"):
+        for status_name, (_, status_models, status_text, _) in local_states.items():
+            icon = "✓" if status_models else "•"
+            st.caption(f"{icon} {status_name}: {status_text}")
 
 if not ticker:
     st.info("Enter a ticker to begin.")
@@ -237,15 +523,18 @@ tabs = st.tabs(
 
 with tabs[0]:
     st.caption(
-        "What this tab does: summarizes the active company, recent SEC filings, selected local "
-        "model, headline annual metrics, and the provenance behind each XBRL value."
+        "What this tab does: summarizes the active company, filings, financial changes, ratios, "
+        "unusual-movement counts, and the selected AI provider. It also supports grounded general "
+        "company questions using verified metrics and the latest 10-K."
     )
     st.subheader(f"{company.name} ({company.ticker})")
     cols = st.columns(4)
     cols[0].metric("CIK", company.cik)
     cols[1].metric("Latest 10-K", latest_10k.filing_date if latest_10k else "Unavailable")
     cols[2].metric("Latest 10-Q", latest_10q.filing_date if latest_10q else "Unavailable")
-    cols[3].metric("Local model", model or "Offline")
+    cols[3].metric("AI provider", provider_name or "Offline")
+    if model:
+        st.caption(f"Selected model: `{model}`")
     if not financials.empty:
         latest_year = financials.index[-1]
         headline = st.columns(4)
@@ -257,47 +546,230 @@ with tabs[0]:
                 human_currency(financials.loc[latest_year, metric_name])
                 if metric_name in financials
                 else "Unavailable",
+                delta=period_delta(financials, metric_name),
             )
+
+        if not ratios.empty and latest_year in ratios.index:
+            st.subheader(f"FY{latest_year} ratio snapshot")
+            ratio_metrics = (
+                ("revenue_growth", "Revenue growth"),
+                ("gross_margin", "Gross margin"),
+                ("operating_margin", "Operating margin"),
+                ("current_ratio", "Current ratio"),
+                ("debt_to_equity", "Debt to equity"),
+            )
+            ratio_columns = st.columns(len(ratio_metrics))
+            for ratio_column, (ratio_name, ratio_label) in zip(
+                ratio_columns, ratio_metrics
+            ):
+                ratio_value = (
+                    ratios.loc[latest_year, ratio_name]
+                    if ratio_name in ratios.columns
+                    else None
+                )
+                ratio_column.metric(ratio_label, ratio_display(ratio_name, ratio_value))
     else:
         st.warning("No reliable XBRL concept mapping was found for this company.")
+
+    st.subheader("Recent SEC filings")
+    filing_columns = st.columns(2)
+    for filing_column, filing, label in (
+        (filing_columns[0], latest_10k, "Annual report"),
+        (filing_columns[1], latest_10q, "Quarterly report"),
+    ):
+        if filing is None:
+            filing_column.info(f"{label}: unavailable")
+        else:
+            filing_column.markdown(
+                f"**{label}: {filing.form}**  \n"
+                f"Filed {filing.filing_date} · Report period {filing.report_date}  \n"
+                f"[Open official SEC filing]({filing.source_url})"
+            )
+            filing_column.caption(f"Accession {filing.accession_number}")
+
+    latest_flags = (
+        anomalies[
+            (anomalies["period"] == latest_year)
+            & anomalies["severity"].isin(["Notable", "Significant"])
+        ]
+        if not financials.empty and not anomalies.empty
+        else pd.DataFrame()
+    )
+    flag_columns = st.columns(3)
+    flag_columns[0].metric("Latest-period flags", len(latest_flags))
+    flag_columns[1].metric(
+        "Significant",
+        int(latest_flags["severity"].eq("Significant").sum())
+        if not latest_flags.empty
+        else 0,
+    )
+    flag_columns[2].metric(
+        "Notable",
+        int(latest_flags["severity"].eq("Notable").sum())
+        if not latest_flags.empty
+        else 0,
+    )
+    st.caption(
+        "Flags are screening signals from the latest displayed annual period, not findings of "
+        "fraud, misconduct, or investment merit."
+    )
+
+    st.divider()
+    st.subheader("Ask a general company question")
+    st.caption(
+        "Answers are grounded in verified FilingLens metrics and passages retrieved from the "
+        "latest 10-K. This is not a live-news or stock-price assistant."
+    )
+    overview_question = st.text_input(
+        "Company question",
+        value="Give me a concise overview of the business, financial performance, and major risks.",
+        key="overview_question",
+    )
+    overview_answer_key = (
+        f"{active_filing_key}:{provider_name or 'offline'}:{model or 'none'}:{overview_question}"
+    )
+    if st.button(
+        "Ask about this company",
+        key="ask_company_overview",
+        disabled=not models or latest_10k is None or not overview_question.strip(),
+    ):
+        try:
+            with st.spinner("Indexing the latest 10-K and generating a grounded answer…"):
+                overview_retriever = get_or_build_retriever(
+                    company, latest_10k, st.session_state.refresh_nonce
+                )
+                overview_answer = ask_filing(
+                    overview_question,
+                    overview_retriever,
+                    provider,
+                    verified_metrics=metrics_context,
+                    model=model,
+                )
+            st.session_state.overview_answer = overview_answer
+            st.session_state.overview_answer_key = overview_answer_key
+        except (LocalLLMError, SECClientError, ValueError) as exc:
+            st.error(str(exc))
+
+    overview_answer = (
+        st.session_state.get("overview_answer")
+        if st.session_state.get("overview_answer_key") == overview_answer_key
+        else None
+    )
+    if overview_answer is not None:
+        if overview_answer.status == "out_of_scope":
+            st.warning(overview_answer.answer)
+        else:
+            st.markdown(overview_answer.answer)
+            with st.expander("Answer sources"):
+                for source_index, result in enumerate(overview_answer.sources, 1):
+                    chunk = result.chunk
+                    st.markdown(
+                        f"**Source {source_index} · {chunk.section}** · "
+                        f"[SEC filing]({chunk.source_url})"
+                    )
+                    st.write(chunk.text)
     with st.expander("Value provenance"):
         st.dataframe(facts, width="stretch", hide_index=True)
 
 with tabs[1]:
     st.caption(
-        "What this tab does: charts Python-calculated financial statements, cash flow, margins, "
-        "ratios, and growth across the selected historical periods."
+        "What this tab does: presents readable multi-year statements with an inline trend for "
+        "each available account. Select any row to expand its full chart, latest value, prior "
+        "value, and change."
     )
     if financials.empty:
         st.warning("SEC financial data for these metrics was unavailable.")
     else:
-        st.plotly_chart(
-            financial_trend_chart(
+        st.info(
+            "Values come from normalized annual SEC/XBRL facts. Missing accounts remain "
+            "unavailable rather than being estimated."
+        )
+        statement_tabs = st.tabs(
+            ["Income Statement", "Balance Sheet", "Cash Flow", "Ratios & Growth"]
+        )
+        with statement_tabs[0]:
+            render_metric_group(
+                "Revenue and gross profit",
                 financials,
-                ["revenue", "gross_profit", "operating_income", "net_income"],
-                "Income statement trends",
-            ),
-            width="stretch",
-        )
-        st.plotly_chart(
-            financial_trend_chart(
+                ["revenue", "cost_of_revenue", "gross_profit"],
+                key="income_revenue",
+            )
+            render_metric_group(
+                "Operating and net income",
                 financials,
-                ["operating_cash_flow", "free_cash_flow", "total_assets", "long_term_debt"],
-                "Cash flow and capital trends",
-            ),
-            width="stretch",
-        )
-        st.plotly_chart(
-            ratio_trend_chart(
-                ratios, ["gross_margin", "operating_margin", "net_margin"], "Margin trends"
-            ),
-            width="stretch",
-        )
-        for statement in ("Income Statement", "Balance Sheet", "Cash Flow"):
-            with st.expander(statement, expanded=statement == "Income Statement"):
-                st.dataframe(statement_table(financials, statement), width="stretch")
-        with st.expander("Ratios and growth"):
-            st.dataframe(format_ratio_table(ratios), width="stretch")
+                ["operating_income", "net_income"],
+                key="income_profit",
+            )
+        with statement_tabs[1]:
+            render_metric_group(
+                "Assets",
+                financials,
+                ["cash", "current_assets", "total_assets"],
+                key="balance_assets",
+            )
+            render_metric_group(
+                "Liabilities and equity",
+                financials,
+                [
+                    "current_liabilities",
+                    "total_liabilities",
+                    "long_term_debt",
+                    "stockholders_equity",
+                ],
+                key="balance_liabilities",
+            )
+        with statement_tabs[2]:
+            render_metric_group(
+                "Cash generation and investment",
+                financials,
+                ["operating_cash_flow", "capital_expenditures", "free_cash_flow"],
+                key="cash_flow",
+            )
+        with statement_tabs[3]:
+            render_metric_group(
+                "Growth",
+                ratios,
+                [
+                    "revenue_growth",
+                    "operating_income_growth",
+                    "net_income_growth",
+                    "operating_cash_flow_growth",
+                    "free_cash_flow_growth",
+                ],
+                key="ratios_growth",
+                ratio=True,
+                component_frame=financials,
+            )
+            render_metric_group(
+                "Margins",
+                ratios,
+                [
+                    "gross_margin",
+                    "operating_margin",
+                    "net_margin",
+                    "operating_cash_flow_margin",
+                    "free_cash_flow_margin",
+                ],
+                key="ratios_margins",
+                ratio=True,
+                component_frame=financials,
+            )
+            render_metric_group(
+                "Returns",
+                ratios,
+                ["return_on_assets", "return_on_equity"],
+                key="ratios_returns",
+                ratio=True,
+                component_frame=financials,
+            )
+            render_metric_group(
+                "Liquidity and leverage",
+                ratios,
+                ["current_ratio", "debt_to_assets", "debt_to_equity"],
+                key="ratios_liquidity",
+                ratio=True,
+                component_frame=financials,
+            )
 
 with tabs[2]:
     st.caption(
@@ -528,7 +1000,7 @@ with tabs[3]:
             )
             st.download_button(
                 "Download insider transactions CSV",
-                insider_frame.to_csv(index=False),
+                safe_csv(insider_frame),
                 f"{company.ticker}_insider_activity.csv",
                 mime="text/csv",
             )
@@ -540,7 +1012,7 @@ with tabs[3]:
 with tabs[4]:
     st.caption(
         "What this tab does: indexes this company's latest 10-K, retrieves the passages most "
-        "relevant to your question, and asks the selected local model to answer using only those "
+        "relevant to your question, and asks the selected AI model to answer using only those "
         "passages and verified FilingLens metrics. Clearly unrelated questions and requests for "
         "price predictions or buy/sell advice are stopped before model generation. Load a new "
         "index after changing tickers."
@@ -557,12 +1029,9 @@ with tabs[4]:
         if not retrieval_is_current:
             if st.button("Load and index latest 10-K", key="load_10k"):
                 with st.spinner("Retrieving, parsing, and indexing the official filing…"):
-                    html = load_filing_text(latest_10k.source_url, st.session_state.refresh_nonce)
-                    retriever, sections = build_retriever(company, latest_10k, html)
-                    st.session_state.retrieval = retriever
-                    st.session_state.sections = sections
-                    st.session_state.retrieval_accession = latest_10k.accession_number
-                    st.session_state.retrieval_ticker = company.ticker
+                    get_or_build_retriever(
+                        company, latest_10k, st.session_state.refresh_nonce
+                    )
                     st.rerun()
         else:
             retriever = st.session_state.retrieval
@@ -570,7 +1039,7 @@ with tabs[4]:
             question = st.text_area("Question", "What factors did management say affected revenue?")
             if st.button("Ask the filing", disabled=not models):
                 try:
-                    with st.spinner("Generating a source-grounded answer locally…"):
+                    with st.spinner("Generating a source-grounded answer…"):
                         answer = ask_filing(
                             question,
                             retriever,
@@ -601,7 +1070,7 @@ with tabs[5]:
     st.caption(
         "What this tab does: creates an eight-section educational brief from the active company's "
         "verified metrics, compact anomaly summary, and indexed 10-K evidence. It requires the "
-        "current ticker's filing index and a connected local model; larger models can take several minutes."
+        "current ticker's filing index and a connected AI model; generation time depends on the provider."
     )
     retriever = st.session_state.get("retrieval")
     retrieval_is_current = (
@@ -618,11 +1087,11 @@ with tabs[5]:
     elif not models:
         st.warning(llm_status)
     else:
-        if st.button("Generate local analyst brief"):
+        if st.button("Generate analyst brief"):
             flagged = anomalies[anomalies["severity"].isin(["Notable", "Significant"])]
             anomaly_context = anomaly_summary_text(flagged)
             try:
-                with st.spinner("Synthesizing verified metrics and filing evidence locally…"):
+                with st.spinner("Synthesizing verified metrics and filing evidence…"):
                     brief = generate_analyst_brief(
                         company.ticker,
                         metrics_context,
@@ -661,7 +1130,7 @@ with tabs[6]:
 
 1. **Data layer:** official SEC submissions, Company Facts, and filing documents with source provenance.
 2. **Analytics layer:** Python calculates financial statements, ratios, changes, free cash flow, and robust anomaly scores.
-3. **Language layer:** the selected LM Studio or Ollama model interprets only verified metrics and retrieved filing evidence.
+3. **Language layer:** the selected local or cloud model interprets only verified metrics and retrieved filing evidence.
 
 ### Selection and anomaly methodology
 
@@ -669,7 +1138,7 @@ Annual XBRL observations prefer mapped US-GAAP concepts, full-year 10-K duration
 
 ### Retrieval and privacy
 
-Filing HTML is cleaned, divided using recognized filing sections, chunked with overlap, and ranked locally with TF-IDF cosine similarity. Filing text is evidence—not instructions. Generative inference goes only to the selected local LM Studio or Ollama loopback endpoint. FilingLens contacts SEC.gov for public data and does not require a paid API.
+Filing HTML is cleaned, divided using recognized filing sections, chunked with overlap, and ranked locally with TF-IDF cosine similarity. Filing text is evidence—not instructions. Local provider traffic stays on loopback. When a cloud provider is selected, the prompt, verified metrics, and retrieved filing passages are sent to that provider's authenticated API. FilingLens contacts SEC.gov for public data; cloud usage may incur charges.
 
 **Educational financial-analysis software. Not investment advice.**
 """

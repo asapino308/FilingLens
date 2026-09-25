@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from filinglens.sec.xbrl import METRIC_DEFINITIONS, select_annual_facts
+from filinglens.sec.xbrl import METRIC_DEFINITIONS, select_annual_facts, select_quarterly_facts
 
 from conftest import make_fact
 
@@ -102,3 +102,26 @@ def test_empty_payload_returns_typed_empty_frame():
     frame = select_annual_facts({}, "NONE")
     assert frame.empty
     assert "xbrl_concept" in frame.columns
+
+
+def test_quarterly_facts_keep_three_month_income_and_ytd_cash_flow_separate():
+    accession = "0000000000-26-000002"
+    def qfact(value, start=None, accn=accession):
+        return make_fact(value, 2026, start=start, end="2026-06-30", filed="2026-08-01",
+                         form="10-Q", fp="Q2", accn=accn)
+    payload = {"cik": 1, "entityName": "Quarter Co", "facts": {"us-gaap": {
+        "RevenueFromContractWithCustomerExcludingAssessedTax": {"units": {"USD": [
+            qfact(55, "2026-04-01"), qfact(110, "2026-01-01"),
+            qfact(999, "2026-04-01", "other-accession"),
+        ]}},
+        "NetCashProvidedByUsedInOperatingActivities": {"units": {"USD": [
+            qfact(20, "2026-04-01"), qfact(42, "2026-01-01"),
+        ]}},
+        "Assets": {"units": {"USD": [qfact(300)]}},
+    }}}
+    frame = select_quarterly_facts(payload, "QCO", accession, "2026-06-30")
+    values = dict(zip(frame["metric"], frame["value"]))
+    assert values == {"revenue": 55, "operating_cash_flow": 42, "total_assets": 300}
+    assert frame["accession_number"].eq(accession).all()
+    assert frame.loc[frame["metric"] == "revenue", "period_start"].iloc[0] == "2026-04-01"
+    assert frame.loc[frame["metric"] == "operating_cash_flow", "period_start"].iloc[0] == "2026-01-01"

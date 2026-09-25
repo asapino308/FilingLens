@@ -1,4 +1,4 @@
-"""Provider-agnostic local language model interface."""
+"""Provider-agnostic language model interface."""
 
 from __future__ import annotations
 

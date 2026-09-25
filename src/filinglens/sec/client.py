@@ -9,6 +9,7 @@ from pathlib import Path
 import threading
 import time
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 
@@ -24,6 +25,7 @@ class SECClient:
 
     DATA_BASE = "https://data.sec.gov"
     WWW_BASE = "https://www.sec.gov"
+    MAX_RESPONSE_BYTES = 64 * 1024 * 1024
 
     def __init__(
         self,
@@ -51,7 +53,7 @@ class SECClient:
         self._client = httpx.Client(
             headers=self.headers,
             timeout=timeout,
-            follow_redirects=True,
+            follow_redirects=False,
             transport=transport,
         )
 
@@ -77,22 +79,36 @@ class SECClient:
             self._last_request = time.monotonic()
 
     def get_bytes(self, url: str, *, refresh: bool = False) -> bytes:
+        parsed = urlsplit(url)
+        if (parsed.scheme != "https" or parsed.hostname not in {"data.sec.gov", "www.sec.gov"}
+                or parsed.port is not None or parsed.username or parsed.password or parsed.fragment):
+            raise SECClientError("SEC requests must use an official HTTPS SEC host.")
         cache_path = self._cache_path(url)
         if cache_path.exists() and not refresh:
+            if cache_path.stat().st_size > self.MAX_RESPONSE_BYTES:
+                raise SECClientError("Cached SEC response exceeds the safe size limit.")
             return cache_path.read_bytes()
 
         last_error: Exception | None = None
         for attempt in range(self.max_retries + 1):
             self._throttle()
             try:
-                response = self._client.get(url)
-                response.raise_for_status()
-                content = response.content
+                with self._client.stream("GET", url) as response:
+                    if response.is_redirect:
+                        raise SECClientError("SEC redirected the request; the target was not followed.")
+                    response.raise_for_status()
+                    content = bytearray()
+                    for chunk in response.iter_bytes():
+                        if len(content) + len(chunk) > self.MAX_RESPONSE_BYTES:
+                            raise SECClientError("SEC response exceeds the safe size limit.")
+                        content.extend(chunk)
                 if not content:
                     raise SECClientError(f"SEC returned an empty response for {url}")
                 cache_path.write_bytes(content)
-                return content
-            except (httpx.HTTPError, SECClientError) as exc:
+                return bytes(content)
+            except SECClientError:
+                raise
+            except httpx.HTTPError as exc:
                 last_error = exc
                 if attempt < self.max_retries:
                     time.sleep(min(2**attempt, 8))
@@ -124,7 +140,9 @@ class SECClient:
         )
 
     def filing_document(self, url: str, *, refresh: bool = False) -> str:
-        if not url.startswith(f"{self.WWW_BASE}/Archives/"):
+        parsed = urlsplit(url)
+        if (parsed.scheme != "https" or parsed.hostname != "www.sec.gov"
+                or parsed.port is not None or parsed.username or parsed.password
+                or not parsed.path.startswith("/Archives/") or parsed.fragment):
             raise ValueError("Filing URLs must point to the official SEC Archives host.")
         return self.get_bytes(url, refresh=refresh).decode("utf-8", errors="replace")
-
