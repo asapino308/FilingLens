@@ -4,6 +4,8 @@
 
 FilingLens combines structured accounting data and narrative filings without allowing a generative model to become the source of record. Data acquisition, numerical analysis, retrieval, and language generation are separate modules connected by explicit data structures.
 
+The new desktop interface lives in `desktop/`. Its React front end calls `filinglens.desktop.api`, a token-protected FastAPI service bound to `127.0.0.1`. Tauri starts a bundled Python sidecar and shuts it down when the app exits. The existing Streamlit `app.py` remains an alternate interface over the same calculation modules.
+
 ## Data flow
 
 ```text
@@ -18,7 +20,8 @@ Official filing HTML
   → TF-IDF index → top-k evidence passages
 
 Verified Python metrics + retrieved evidence + user question
-  → local provider (LM Studio or Ollama) → answer / analyst brief + visible sources
+  → selected provider (LM Studio, local Ollama, Ollama Cloud, OpenAI, or Anthropic)
+  → answer / analyst brief + visible sources
 ```
 
 ## Trust boundaries
@@ -35,13 +38,13 @@ Filing text is untrusted external input. It never becomes a system message or ap
 
 ### Language layer
 
-`filinglens.documents` cleans, sections, chunks, and ranks filing text locally. `filinglens.llm` exposes a common contract with LM Studio and Ollama implementations. `grounded_qa.py` combines only top-ranked evidence and verified metrics. The system prompt rejects document instructions, unsupported claims, invented citations, and personalized investment advice.
+`filinglens.documents` cleans, sections, chunks, and ranks filing text locally. `filinglens.llm` exposes a common contract for LM Studio, local Ollama, Ollama Cloud, OpenAI, and Anthropic. `grounded_qa.py` combines only top-ranked evidence and verified metrics. The system prompt rejects document instructions, unsupported claims, invented citations, and personalized investment advice. Local providers receive traffic only on loopback; selecting a cloud provider sends the bounded prompt to its authenticated API.
 
 ## Module responsibilities
 
 | Module | Responsibility |
 |---|---|
-| `config.py` | Local environment configuration and cache path |
+| `config.py` | Environment, provider, credential, and cache configuration |
 | `sec/client.py` | Headers, throttling, retries, caching, validation |
 | `sec/companies.py` | Ticker normalization and CIK resolution |
 | `sec/submissions.py` | Filing metadata and official archive URLs |
@@ -52,12 +55,16 @@ Filing text is untrusted external input. It never becomes a system message or ap
 | `documents/*` | Parsing, sectioning, chunking, TF-IDF retrieval |
 | `llm/base.py` | Replaceable provider contract |
 | `llm/lmstudio.py` | Discovery, health, local generation, offline errors |
-| `llm/ollama.py` | Native Ollama discovery, generation, statistics, offline errors |
+| `llm/ollama.py` | Native local/cloud Ollama discovery, authentication, generation, statistics, errors |
 | `llm/grounded_qa.py` | Evidence and metric grounded questions |
 | `llm/analyst_brief.py` | Required-section local synthesis |
 | `evaluation/*` | Reusable questions and benchmark records |
 | `reporting/export.py` | Safe Markdown-to-HTML export |
 | `app.py` | Streamlit orchestration and user-facing errors |
+| `desktop/src` | React company workspace, statements, filings, signals, and settings |
+| `desktop/src-tauri` | Mac window, private sidecar launch, and native external links |
+| `filinglens/desktop/service.py` | Shared desktop research data and AI orchestration |
+| `filinglens/desktop/api.py` | Local JSON API and request validation |
 
 ## Caching and performance
 
@@ -69,5 +76,5 @@ The on-disk SEC cache survives Streamlit reruns and is ignored by Git. Streamlit
 - Missing concepts remain absent rather than synthesized.
 - Unusual filing markup falls back to full-text chunking.
 - An empty retrieval result returns an insufficient-evidence response without calling the model.
-- Local-provider discovery or generation errors affect only AI tabs.
+- Provider discovery or generation errors affect only AI-assisted features.
 - Export escapes HTML from model output.

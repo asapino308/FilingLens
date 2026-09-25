@@ -10,6 +10,57 @@ import plotly.graph_objects as go
 COLORS = ["#0B4F6C", "#01BAEF", "#6C8EAD", "#F4A261", "#2A9D8F"]
 
 
+def account_trend_chart(
+    frame: pd.DataFrame,
+    metric: str,
+    label: str,
+    *,
+    ratio: bool = False,
+    multiple: bool = False,
+) -> go.Figure:
+    """Build a focused account chart for row-level financial-statement drill-down."""
+    if metric not in frame.columns:
+        return go.Figure().update_layout(title="No reliable mapped data available")
+    series = pd.to_numeric(frame[metric], errors="coerce")
+    values = series if not ratio or multiple else series * 100
+    hover_template = (
+        "%{y:.2f}x"
+        if multiple
+        else "%{y:.1f}%"
+        if ratio
+        else "$%{y:,.0f}"
+    )
+    figure = go.Figure(
+        go.Scatter(
+            x=[int(year) for year in series.index],
+            y=values,
+            mode="lines+markers",
+            line={"color": "#2A9D8F", "width": 3},
+            marker={"size": 8},
+            fill="tozeroy",
+            fillcolor="rgba(42, 157, 143, 0.12)",
+            hovertemplate=f"FY%{{x}}<br>{label}: {hover_template}<extra></extra>",
+        )
+    )
+    figure.update_layout(
+        template="plotly_white",
+        title=label,
+        showlegend=False,
+        height=310,
+        margin={"l": 25, "r": 15, "t": 55, "b": 30},
+        xaxis={"title": "Fiscal year", "dtick": 1},
+        yaxis={
+            "title": "Multiple" if multiple else "Percent" if ratio else "USD",
+            "ticksuffix": "x" if multiple else "%" if ratio else "",
+            "tickformat": ".2f" if multiple else ".1f" if ratio else "~s",
+            "zeroline": True,
+            "zerolinecolor": "#9CA3AF",
+        },
+        hovermode="x unified",
+    )
+    return figure
+
+
 def financial_trend_chart(frame: pd.DataFrame, metrics: list[str], title: str) -> go.Figure:
     selected = [metric for metric in metrics if metric in frame.columns]
     if not selected:
@@ -61,4 +112,3 @@ def ratio_trend_chart(ratios: pd.DataFrame, metrics: list[str], title: str) -> g
         hovermode="x unified",
     )
     return figure
-

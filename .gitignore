@@ -18,3 +18,17 @@ data/filings/
 data/retrieval/
 reports/generated/
 *.log
+desktop/node_modules/
+desktop/dist/
+desktop/src-tauri/target/
+desktop/src-tauri/binaries/
+dist/
+build/
+release/
+docs/resume_summary.md
+docs/project_report.md
+docs/FilingLens_Project_Report.docx
+docs/FilingLens_User_Guide.docx
+scripts/build_docx_reports.py
+*.spec
+*.tsbuildinfo

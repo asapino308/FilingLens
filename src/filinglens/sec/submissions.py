@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 from typing import Any, Iterable
 
 
@@ -35,7 +36,12 @@ def parse_recent_filings(
     filings: list[FilingMetadata] = []
     for values in zip(*arrays):
         form, filing_date, report_date, accession, primary_document = values
-        if form in wanted:
+        # These names originate in issuer-submitted metadata and later become links.
+        safe_document = isinstance(primary_document, str) and bool(re.fullmatch(
+            r"(?:xslF[0-9A-Za-z]+/)?[A-Za-z0-9][A-Za-z0-9._-]*", primary_document
+        )) and ".." not in primary_document
+        safe_accession = isinstance(accession, str) and bool(re.fullmatch(r"\d{10}-\d{2}-\d{6}", accession))
+        if form in wanted and cik.isdigit() and safe_accession and safe_document:
             filings.append(
                 FilingMetadata(
                     form=form,
@@ -51,4 +57,3 @@ def parse_recent_filings(
 
 def latest_filing(submissions: dict[str, Any], form: str) -> FilingMetadata | None:
     return next(iter(parse_recent_filings(submissions, (form,))), None)
-

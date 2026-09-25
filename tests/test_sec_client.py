@@ -165,3 +165,30 @@ def test_filing_host_is_restricted(tmp_path):
     client = SECClient("FilingLens/1.0 test@example.com", tmp_path)
     with pytest.raises(ValueError, match="official SEC"):
         client.filing_document("https://example.com/fake.htm")
+
+
+def test_sec_client_rejects_redirect_without_sending_contact_to_target(tmp_path):
+    observed = []
+    def handler(request):
+        observed.append(str(request.url))
+        return httpx.Response(302, headers={"Location": "https://example.com/collect"})
+    client = SECClient("FilingLens/1.0 test@example.com", tmp_path, min_interval=0,
+                       transport=httpx.MockTransport(handler))
+    with pytest.raises(SECClientError, match="redirected"):
+        client.get_bytes("https://www.sec.gov/Archives/test.htm")
+    assert observed == ["https://www.sec.gov/Archives/test.htm"]
+    with pytest.raises(SECClientError, match="official HTTPS SEC host"):
+        client.get_bytes("https://www.sec.gov.evil.example/Archives/test.htm")
+
+
+def test_sec_client_limits_download_and_cache(tmp_path, monkeypatch):
+    client = SECClient("FilingLens/1.0 test@example.com", tmp_path, min_interval=0,
+                       transport=httpx.MockTransport(lambda _: httpx.Response(200, content=b"12345")))
+    monkeypatch.setattr(client, "MAX_RESPONSE_BYTES", 4)
+    url = "https://data.sec.gov/test.json"
+    with pytest.raises(SECClientError, match="size limit"):
+        client.get_bytes(url)
+    assert not client._cache_path(url).exists()
+    client._cache_path(url).write_bytes(b"12345")
+    with pytest.raises(SECClientError, match="size limit"):
+        client.get_bytes(url)

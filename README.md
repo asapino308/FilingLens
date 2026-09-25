@@ -1,10 +1,20 @@
 # FilingLens
 
-FilingLens is a local-first Streamlit application that combines official SEC EDGAR data, deterministic Python financial analytics, transparent filing retrieval, and source-grounded language generation through LM Studio or Ollama. It is designed as educational financial-analysis software - not investment advice.
+FilingLens is a local-first Mac research app that combines official SEC EDGAR data, deterministic Python financial analytics, transparent filing retrieval, and source-grounded language generation through LM Studio, local Ollama, Ollama Cloud, OpenAI, or Anthropic. The original Streamlit interface remains available as a fallback. FilingLens is educational financial-analysis software, not investment advice.
+
+## New Mac app
+
+Download the Apple Silicon Mac app from [GitHub Releases](https://github.com/asapino308/FilingLens/releases). It runs on macOS 14 or newer and includes its own Python service; users do not need to install Python, Node, or Rust. Follow the [Mac download and first-launch instructions](docs/desktop_app.md#download-and-open-the-mac-app) before opening it.
+
+**Current release:** the app has an ad hoc code signature but has not been verified or notarized by Apple. macOS will warn when it is downloaded. The guide explains Apple's **Open Anyway** flow. Only allow the app after downloading it from this repository's release page; do not bypass a warning that says the app contains malware or has been damaged.
+
+FilingLens starts a private Python service automatically and keeps the SEC cache under `~/Library/Application Support/FilingLens/cache`. A fresh download contains no user's settings, SEC cache, or AI key. On first launch, enter your own SEC contact in Settings; optional cloud AI keys are stored in macOS Keychain. Your later research and preferences stay on your device. First startup can take several seconds while the service starts. SEC data does not require an API key.
+
+The [desktop user guide](docs/desktop_app.md) explains every workspace area. To rebuild on an Apple Silicon Mac with Python, Node, and Rust installed, run `./scripts/build_desktop_macos.sh`, quit FilingLens, and replace the installed app with the new build. Daily use requires only opening the `.app`. A local AI server must still be running if you choose LM Studio or local Ollama; deterministic financial research works without AI.
 
 ## Project motivation
 
-Financial filings contain both structured accounting data and qualitative management discussion. FilingLens keeps those responsibilities separate: SEC/XBRL supplies traceable facts, Python performs authoritative calculations, and a replaceable local model explains only the verified metrics and retrieved filing passages it receives.
+Financial filings contain both structured accounting data and qualitative management discussion. FilingLens keeps those responsibilities separate: SEC/XBRL supplies traceable facts, Python performs authoritative calculations, and a replaceable AI provider explains only the verified metrics and retrieved filing passages it receives.
 
 ## Key features
 
@@ -16,7 +26,10 @@ Financial filings contain both structured accounting data and qualitative manage
 - Economic year-over-year and median-absolute-deviation anomaly screens
 - Optional magnitude-aware anomaly coloring with full, unclipped explanations
 - Safe HTML cleanup, best-effort filing section detection, overlapping chunks, and local TF-IDF retrieval
-- Automatic LM Studio and Ollama discovery, model selection, grounded Q&A, citations, and analyst brief export
+- Automatic LM Studio, local Ollama, and Ollama Cloud discovery, model selection, grounded Q&A, citations, and analyst brief export
+- Expanded Overview with year-over-year deltas, ratio snapshot, direct filing links, latest anomaly counts, and general company Q&A
+- Local research approaches (Explore, Evaluate, Follow), saved companies, guided filing questions, and a source-linked comparison with the last company check
+- Latest 10-Q reading and grounded Q&A, a separate quarterly financial snapshot, and analyst briefs citing both recent 10-K and 10-Q evidence when available
 - Graceful no-LLM mode: all deterministic and retrieval features remain usable
 - A 20-question evaluation set and optional cross-model benchmark runner
 
@@ -32,7 +45,7 @@ flowchart LR
     PARSE --> RET[Local TF-IDF retrieval]
     RET --> CTX[Grounded context]
     PY --> CTX
-    CTX --> LM[LM Studio or Ollama on localhost]
+    CTX --> LM[LM Studio / local Ollama / Ollama Cloud]
     LM --> QA[Ask the Filing]
     LM --> BRIEF[Analyst brief]
 ```
@@ -41,15 +54,15 @@ The application has three explicit trust layers:
 
 1. **Data:** official SEC/XBRL observations and filing text with provenance.
 2. **Analytics:** deterministic Python statements, ratios, changes, and anomaly scores.
-3. **Language:** local-model interpretation of supplied calculations and evidence.
+3. **Language:** provider-selected interpretation of supplied calculations and evidence.
 
 See [docs/architecture.md](docs/architecture.md) for module-level detail.
 
 ## Technology stack
 
-Python 3.11+, pandas, NumPy, SciPy, scikit-learn, HTTPX, Beautiful Soup, lxml, Streamlit, Plotly, python-dotenv, pytest, official SEC EDGAR endpoints, and local LM Studio/Ollama APIs.
+Python 3.11+, pandas, NumPy, HTTPX, Beautiful Soup, lxml, Streamlit, Plotly, FastAPI, Tauri, React, python-dotenv, pytest, official SEC EDGAR endpoints, and LM Studio/Ollama APIs.
 
-## Mac quick start
+## Mac source setup
 
 ### Prerequisites
 
@@ -84,7 +97,7 @@ Manual installation and troubleshooting are covered in [the Mac setup guide](doc
 
 ```dotenv
 SEC_USER_AGENT=FilingLens/1.0 your-email@example.com
-LOCAL_LLM_PROVIDER=auto
+AI_PROVIDER=auto
 LMSTUDIO_BASE_URL=http://127.0.0.1:1234/v1
 LMSTUDIO_MODEL=
 LMSTUDIO_API_KEY=
@@ -92,13 +105,21 @@ LMSTUDIO_TIMEOUT_SECONDS=300
 OLLAMA_BASE_URL=http://127.0.0.1:11434
 OLLAMA_MODEL=
 OLLAMA_TIMEOUT_SECONDS=300
+OLLAMA_API_KEY=
+OLLAMA_CLOUD_BASE_URL=https://ollama.com
+OLLAMA_CLOUD_MODEL=
+OLLAMA_CLOUD_TIMEOUT_SECONDS=300
+OPENAI_API_KEY=
+OPENAI_MODEL=
+ANTHROPIC_API_KEY=
+ANTHROPIC_MODEL=
 ```
 
 ### SEC User-Agent setup
 
 The SEC requests an identifiable automated-access header. Replace the example address with a monitored contact address. FilingLens caps requests at roughly 2.5 per second, retries transient failures with exponential backoff, and caches responses under `data/cache/`.
 
-`LOCAL_LLM_PROVIDER=auto` checks LM Studio first and then Ollama. Set it to `lmstudio` or `ollama` to force one service. Model fields may remain blank so FilingLens can discover available chat models.
+`AI_PROVIDER=auto` checks LM Studio, local Ollama, Ollama Cloud, OpenAI, and Anthropic. Set it to `lmstudio`, `ollama`, `ollama_cloud`, `openai`, or `anthropic` to force one service. Model fields may remain blank so FilingLens can discover available text models. The older `LOCAL_LLM_PROVIDER` variable remains accepted for backward compatibility.
 
 ### Option A: LM Studio (recommended for a visual Mac workflow)
 
@@ -121,7 +142,7 @@ curl http://127.0.0.1:1234/v1/models
 1. Install [Ollama for macOS](https://ollama.com/download) and open the app.
 2. On Apple Silicon, download the comparable MLX model with `ollama run gemma4:12b-mlx`. The portable non-MLX tag is `gemma4:12b`.
 3. Exit the first chat with `/bye`; the model remains installed and the local service normally remains available on port `11434`.
-4. Set `LOCAL_LLM_PROVIDER=ollama` in `.env`, or leave `auto` if LM Studio is not running.
+4. Set `AI_PROVIDER=ollama` in `.env`, or leave `auto` if LM Studio is not running.
 
 Verify Ollama with:
 
@@ -129,7 +150,24 @@ Verify Ollama with:
 curl http://127.0.0.1:11434/api/tags
 ```
 
-The deterministic SEC, analytics, charting, anomaly, insider, and retrieval features work when no local model service is running.
+The deterministic SEC, analytics, charting, anomaly, insider, and retrieval features work when no AI provider is available.
+
+### Option C: Ollama Cloud API
+
+1. Create an API key in [Ollama API key settings](https://ollama.com/settings/keys).
+2. Open FilingLens and expand **Add Ollama Cloud API key** in the sidebar.
+3. Paste the key, then choose **Connect for this session** or **Save on this Mac**. The latter writes it only to the Git-ignored `.env` with owner-only permissions.
+4. Select **Ollama Cloud** and an available model. FilingLens discovers models from `https://ollama.com/api/tags`.
+
+Advanced users may instead place the key in `.env` as `OLLAMA_API_KEY=...`. Set `AI_PROVIDER=ollama_cloud` to force cloud mode, or leave `auto` to keep every detected provider selectable.
+
+Ollama Cloud receives the question, verified metrics, and retrieved SEC filing passages used in a request. The key is sent only in the Bearer authorization header and is never displayed by FilingLens. Cloud usage may consume plan credits.
+
+The sidebar initially limits Ollama Cloud choices to the six models covered by the current free-credit list and remembers the chosen model across app reruns. A separate checkbox reveals additional models that may require paid credits. If Ollama returns HTTP 402, FilingLens reports which model was rejected and directs the user to free-model or account-credit options instead of exposing the raw HTTP exception.
+
+### Option D: OpenAI or Anthropic API
+
+In the Mac app, open **Settings**, paste an OpenAI or Anthropic API key, and save. Keys are stored in macOS Keychain. Select the provider and an available model. In the Streamlit interface, expand **Add OpenAI API key** or **Add Anthropic API key**; you can connect for the current session or save to the Git-ignored `.env` file. Advanced users can set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` directly, with optional `OPENAI_MODEL` or `ANTHROPIC_MODEL` defaults. These direct APIs may incur provider charges. The selected provider receives the question, verified metrics, and retrieved filing passages.
 
 ## Launch
 
@@ -142,22 +180,19 @@ Then open `http://localhost:8501`.
 ## Example workflow
 
 1. Enter `AAPL`, `MSFT`, or another SEC-reporting ticker.
-2. Inspect current filing metadata, verified metrics, and XBRL provenance.
+2. Inspect filing metadata, year-over-year deltas, the ratio snapshot, and latest anomaly counts on Overview.
 3. Review five-year statements, margins, cash flow, liquidity, and leverage.
 4. Filter notable or significant unusual-change flags.
-5. Load and index the latest 10-K, then ask a filing question.
+5. Ask a grounded general company question on Overview or load the latest 10-K in Ask the Filing.
 6. Inspect every retrieved source and its official SEC link.
-7. Generate and download a Markdown or HTML analyst brief locally.
+7. Generate and download a Markdown or HTML analyst brief.
 
 Validated example output is summarized in [examples/example_analysis.md](examples/example_analysis.md).
 
 For complete operational documentation, see:
 
+- [Project implementation report](docs/project_report.md)
 - [End-user guide and interface reference](docs/user_guide.md)
-- [macOS setup guide](docs/macos_setup.md)
-- [Architecture and trust boundaries](docs/architecture.md)
-- [Financial-data methodology](docs/methodology.md)
-- [Evaluation methodology and results](docs/evaluation.md)
 
 ## Financial data methodology
 
@@ -198,23 +233,23 @@ MAD is preferred to an ordinary z-score because short financial histories and a 
 
 ## Retrieval methodology
 
-SEC HTML is cleaned of active elements, segmented using recognized 10-K/10-Q headings with a full-text fallback, and divided into roughly 450-word chunks with overlap. A local scikit-learn TF-IDF index ranks chunks by cosine similarity. The UI exposes scores, passage text, section, filing date, accession, and official source URL.
+SEC HTML is cleaned of active elements, segmented using recognized 10-K/10-Q headings with a full-text fallback, and divided into roughly 450-word chunks with overlap. A lightweight local TF-IDF index ranks chunks by cosine similarity. The UI exposes scores, passage text, section, filing date, accession, and official source URL.
 
-## Local LLM and numerical grounding
+## AI providers and numerical grounding
 
-FilingLens discovers exact LM Studio or Ollama model IDs instead of guessing them. Its prompt treats retrieved text as untrusted evidence, requires `[Source N]` citations, refuses unsupported claims, and distinguishes management commentary from Python calculations. Verified metrics are serialized into the model context; the model explains them but is not authoritative for their calculation.
+FilingLens discovers exact model IDs from the selected provider instead of guessing them. Its prompt treats retrieved text as untrusted evidence, requires `[Source N]` citations, refuses unsupported claims, and distinguishes management commentary from Python calculations. Verified metrics are serialized into the model context; the model explains them but is not authoritative for their calculation.
 
-Filing Q&A and the longer analyst brief disable model thinking/reasoning through the selected provider's native local endpoint so output budgets are reserved for visible answers. A conservative deterministic preflight rejects clearly unrelated questions and requests for price predictions or buy/sell advice before model generation. All generation defaults to `127.0.0.1`.
+Filing Q&A, Overview Q&A, and the longer analyst brief disable model thinking/reasoning where supported so output budgets are reserved for visible answers. A conservative deterministic preflight rejects clearly unrelated questions and requests for price predictions or buy/sell advice before model generation. Local providers use loopback endpoints; Ollama Cloud uses the authenticated `https://ollama.com/api` endpoint.
 
 ## AI evaluation
 
-`src/filinglens/evaluation/qa_eval.py` contains 20 reusable questions across direct retrieval, MD&A reasoning, risks, metric interpretation, and deliberately unsupported requests. Deterministic checks cover citation presence and insufficient-evidence language. `benchmark.py` can repeat the same questions across selected local models and records model ID, category, answer, citation behavior, latency, and output length.
+`src/filinglens/evaluation/qa_eval.py` contains 20 reusable questions across direct retrieval, MD&A reasoning, risks, metric interpretation, and deliberately unsupported requests. Deterministic checks cover citation presence and insufficient-evidence language. `benchmark.py` can repeat the same questions across selected models and records model ID, category, answer, citation behavior, latency, and output length.
 
 Current live checks are reported in [docs/evaluation.md](docs/evaluation.md). They are smoke tests, not a statistically conclusive model benchmark.
 
 ## Privacy
 
-The finished application contacts SEC.gov for public filings and financial facts. All generative inference goes to the selected loopback LM Studio or Ollama service. FilingLens does not send filing text or user questions to OpenAI, Anthropic, Google, or another cloud LLM API. The local `.env`, SEC cache, model files, and generated reports are excluded from Git. Streamlit usage telemetry is disabled in the committed configuration.
+The application contacts SEC.gov for public filings and financial facts. Local inference stays on the selected loopback LM Studio or Ollama service. When a cloud provider is selected, FilingLens sends the question, verified metrics, and retrieved filing passages to that provider's authenticated API. The local `.env`, SEC cache, model files, and generated reports are excluded from Git. Streamlit usage telemetry is disabled in the committed configuration.
 
 ## Testing
 

@@ -1,6 +1,6 @@
 # FilingLens setup on macOS
 
-This is the shortest supported path from a GitHub download to a working FilingLens installation. The financial-analysis features do not require a local language model; LM Studio or Ollama is optional for Ask the Filing and Analyst Brief.
+This guide is for installing the **Streamlit source interface** from GitHub. To download the ready-to-open Apple Silicon Mac app, use the [desktop download and first-launch guide](desktop_app.md#download-and-open-the-mac-app). The deterministic financial-analysis features do not require AI. LM Studio, local Ollama, Ollama Cloud, OpenAI, or Anthropic can optionally power the question and brief features.
 
 ## 1. Check the Mac
 
@@ -56,7 +56,7 @@ SEC_USER_AGENT=FilingLens/1.0 your-email@example.com
 
 to an address you monitor. The SEC uses this header to contact automated clients when necessary. The `.env` file is ignored by Git and the doctor never prints the value, but the address is transmitted to SEC.gov with requests.
 
-## 5. Choose a local AI service
+## 5. Choose an AI service
 
 ### LM Studio
 
@@ -67,7 +67,7 @@ LM Studio is the easiest option for users who prefer a graphical model manager.
 3. On Apple Silicon with 16-24 GB memory, choose the MLX 5-bit build (approximately 7.7 GB). A smaller Gemma 4 E2B/E4B model is safer on an 8 GB Mac.
 4. Load the model with an initial context of 16K-32K. Very large contexts consume substantially more memory and FilingLens retrieves only a few relevant passages.
 5. Open Developer and start the server on port `1234`. Keep network serving disabled unless you deliberately need it.
-6. Keep `LOCAL_LLM_PROVIDER=auto` or set it to `lmstudio` in `.env`.
+6. Keep `AI_PROVIDER=auto` or set it to `lmstudio` in `.env`.
 
 Verify:
 
@@ -99,7 +99,11 @@ ollama run gemma4:12b-mlx
 The comparable portable tag is `gemma4:12b`. Smaller Macs can start with `gemma4:e2b-mlx`.
 
 3. Type `/bye` to leave the initial chat.
-4. Set `LOCAL_LLM_PROVIDER=ollama` in `.env` if LM Studio may also be running.
+4. Set `AI_PROVIDER=ollama` in `.env` if LM Studio may also be running.
+
+### Ollama Cloud alternative
+
+Create an Ollama API key, launch FilingLens, and expand **Add Ollama Cloud API key** in the sidebar. Paste the key and choose either **Connect for this session** or **Save on this Mac**. FilingLens immediately discovers cloud models from `https://ollama.com/api/tags`; no Terminal editing or restart is required. Questions, verified metrics, and retrieved filing passages are sent to Ollama when this provider is selected.
 
 Verify:
 

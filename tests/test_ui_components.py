@@ -8,6 +8,12 @@ from filinglens.ui.components import (
     anomaly_color_css,
     anomaly_display_table,
     anomaly_summary_text,
+    metric_display_value,
+    metric_component_table,
+    metric_latest_change,
+    metric_trend_table,
+    period_delta,
+    ratio_display,
     synchronize_filing_session,
 )
 
@@ -188,3 +194,70 @@ def test_filing_session_state_is_cleared_on_ticker_or_accession_change():
     assert changed is True
     assert state == {"active_filing_key": "AMZN:new", "unrelated": "keep"}
     assert synchronize_filing_session(state, "AMZN:new") is False
+
+
+def test_overview_metric_helpers_format_deltas_and_ratios():
+    frame = pd.DataFrame({"revenue": [100.0, 125.0]}, index=[2024, 2025])
+    assert period_delta(frame, "revenue") == "+25.0% vs FY2024"
+    assert period_delta(frame, "missing") is None
+    assert ratio_display("operating_margin", 0.234) == "23.4%"
+    assert ratio_display("current_ratio", 1.456) == "1.46x"
+    assert ratio_display("current_ratio", None) == "Unavailable"
+
+
+def test_metric_trend_table_builds_readable_statement_rows_and_sparklines():
+    frame = pd.DataFrame(
+        {"revenue": [100_000_000.0, 125_000_000.0], "net_income": [None, 9_000_000.0]},
+        index=pd.Index([2024, 2025], name="fiscal_year"),
+    )
+
+    display = metric_trend_table(frame, ["revenue", "net_income"])
+
+    assert list(display["Account"]) == ["Revenue", "Net income"]
+    assert display.loc[0, "Trend"] == [100_000_000.0, 125_000_000.0]
+    assert display.loc[0, "FY2025"] == "$125.00M"
+    assert display.loc[0, "Latest change"] == "+25.0%"
+    assert display.loc[1, "FY2024"] == "—"
+    assert display.loc[1, "Trend"] == [9_000_000.0]
+
+
+def test_ratio_trend_helpers_use_percentage_points_and_multiples():
+    ratios = pd.DataFrame(
+        {"gross_margin": [0.40, 0.45], "current_ratio": [1.2, 1.5]},
+        index=pd.Index([2024, 2025], name="fiscal_year"),
+    )
+
+    display = metric_trend_table(
+        ratios, ["gross_margin", "current_ratio"], ratio=True
+    )
+
+    assert display.loc[0, "FY2025"] == "45.0%"
+    assert display.loc[0, "Latest change"] == "+5.0 pp"
+    assert display.loc[1, "FY2025"] == "1.50x"
+    assert display.loc[1, "Latest change"] == "+0.30x"
+    assert metric_display_value("gross_margin", None, ratio=True) == "—"
+    assert metric_latest_change(ratios.iloc[:1], "gross_margin", ratio=True) == "—"
+
+
+def test_metric_component_table_explains_derived_metrics_and_growth():
+    financials = pd.DataFrame(
+        {
+            "revenue": [100.0, 120.0],
+            "cost_of_revenue": [60.0, 70.0],
+            "gross_profit": [40.0, 50.0],
+            "net_income": [10.0, 12.0],
+            "total_assets": [80.0, 100.0],
+        },
+        index=pd.Index([2024, 2025], name="fiscal_year"),
+    )
+
+    gross_profit = metric_component_table(financials, "gross_profit", 2025)
+    assert list(gross_profit["Component"]) == ["Revenue", "Less: Cost of revenue"]
+    growth = metric_component_table(financials, "revenue_growth", 2025)
+    assert list(growth["Component"]) == [
+        "Current Revenue",
+        "Prior Revenue (FY2024)",
+    ]
+    roa = metric_component_table(financials, "return_on_assets", 2025)
+    assert list(roa["Component"]) == ["Net income", "Average total assets"]
+    assert metric_component_table(financials, "revenue", 2025).empty

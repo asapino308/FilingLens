@@ -1,6 +1,6 @@
 # FilingLens User Guide
 
-This guide explains how to install, launch, and use FilingLens, including what every main control, tab, table, and output means.
+This guide documents the original Streamlit interface. For the ready-to-open Apple Silicon Mac download, including the required macOS **Open Anyway** steps for the current unnotarized build, use the [FilingLens desktop user guide](desktop_app.md#download-and-open-the-mac-app). The Streamlit version remains available.
 
 > **Responsible-use notice:** FilingLens is educational financial-analysis software. It is not investment advice, an audit opinion, or a fraud-detection system.
 
@@ -11,7 +11,7 @@ FilingLens helps users investigate U.S. public companies through two kinds of of
 - **Structured XBRL facts** used for financial statements, ratios, growth, and unusual-change analysis.
 - **Filing documents** used for management commentary, risks, business descriptions, and source-grounded questions.
 
-Python calculates the numerical results. A local LM Studio or Ollama model can explain those results and relevant filing passages, but it is not the source of the calculations.
+Python calculates the numerical results. LM Studio, local Ollama, Ollama Cloud, OpenAI, or Anthropic can explain those results and relevant filing passages, but the model is not the source of the calculations.
 
 ## 2. Requirements
 
@@ -21,11 +21,11 @@ The documented quick-start path requires:
 - Python 3.11 or newer;
 - an internet connection for package installation and first-time SEC downloads;
 - an identifiable SEC automated-access User-Agent;
-- LM Studio or Ollama only if you want AI questions and analyst briefs.
+- A local LM Studio or Ollama model, or an Ollama Cloud, OpenAI, or Anthropic API key, only if you want AI questions and analyst briefs.
 
 LM Studio requires Apple Silicon and officially recommends 16 GB or more RAM. Ollama also supports Intel Macs in CPU-only mode, although generation will be slower. The tested Gemma 4 12B MLX 5-bit model is approximately 7.7 GB before context/KV-cache overhead, so 16 GB is a practical minimum and 24 GB is more comfortable. Smaller models are appropriate for lower-memory systems. Linux and Windows may also work, but this guide focuses on macOS.
 
-You do **not** need a paid financial-data API or paid cloud-LLM key.
+You do **not** need a paid financial-data API. AI is optional; Ollama Cloud may use free allowance or paid plan credits depending on the account.
 
 ## 3. Installation
 
@@ -63,7 +63,7 @@ Open `.env` and configure:
 
 ```dotenv
 SEC_USER_AGENT=FilingLens/1.0 your-email@example.com
-LOCAL_LLM_PROVIDER=auto
+AI_PROVIDER=auto
 LMSTUDIO_BASE_URL=http://127.0.0.1:1234/v1
 LMSTUDIO_MODEL=
 LMSTUDIO_API_KEY=
@@ -71,6 +71,14 @@ LMSTUDIO_TIMEOUT_SECONDS=300
 OLLAMA_BASE_URL=http://127.0.0.1:11434
 OLLAMA_MODEL=
 OLLAMA_TIMEOUT_SECONDS=300
+OLLAMA_API_KEY=
+OLLAMA_CLOUD_BASE_URL=https://ollama.com
+OLLAMA_CLOUD_MODEL=
+OLLAMA_CLOUD_TIMEOUT_SECONDS=300
+OPENAI_API_KEY=
+OPENAI_MODEL=
+ANTHROPIC_API_KEY=
+ANTHROPIC_MODEL=
 ```
 
 ### What each setting means
@@ -78,7 +86,7 @@ OLLAMA_TIMEOUT_SECONDS=300
 | Setting | Meaning |
 |---|---|
 | `SEC_USER_AGENT` | Identifies your automated SEC client and supplies a contact address. Replace the example email. |
-| `LOCAL_LLM_PROVIDER` | `auto` checks LM Studio first and Ollama second. Use `lmstudio` or `ollama` to force one service. |
+| `AI_PROVIDER` | `auto` checks LM Studio, local Ollama, Ollama Cloud, OpenAI, and Anthropic. Use the corresponding provider ID to force one service. |
 | `LMSTUDIO_BASE_URL` | Local LM Studio OpenAI-compatible endpoint. The normal default is `http://127.0.0.1:1234/v1`. |
 | `LMSTUDIO_MODEL` | Optional exact model ID. Leave blank to discover models automatically. |
 | `LMSTUDIO_API_KEY` | Optional local authentication key. Normally blank when LM Studio authentication is disabled. |
@@ -86,12 +94,18 @@ OLLAMA_TIMEOUT_SECONDS=300
 | `OLLAMA_BASE_URL` | Local Ollama service. The normal default is `http://127.0.0.1:11434`. |
 | `OLLAMA_MODEL` | Optional exact installed Ollama tag. Leave blank to discover models automatically. |
 | `OLLAMA_TIMEOUT_SECONDS` | Maximum wait for one Ollama generation. Default: 300 seconds. |
+| `OLLAMA_API_KEY` | Secret key for direct Ollama Cloud access. Leave blank to disable the cloud provider. |
+| `OLLAMA_CLOUD_BASE_URL` | Ollama Cloud host. Default: `https://ollama.com`. |
+| `OLLAMA_CLOUD_MODEL` | Optional exact cloud model. Leave blank to discover available models. |
+| `OLLAMA_CLOUD_TIMEOUT_SECONDS` | Maximum wait for one Ollama Cloud generation. Default: 300 seconds. |
+| `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` | Optional direct cloud API keys. Leave blank to disable each provider. |
+| `OPENAI_MODEL` / `ANTHROPIC_MODEL` | Optional exact model IDs. Leave blank to discover available models. |
 
 The `.env` file is private and ignored by Git. Do not publish it. The SEC contact address is not printed by the doctor, but it is transmitted to SEC.gov in the request header as required by the SEC's automated-access guidance.
 
-## 5. Optional local AI setup
+## 5. Optional AI setup
 
-You can use all deterministic financial features without a model server. To enable Ask the Filing and Analyst Brief, choose one option.
+You can use all deterministic financial features without an AI provider. To enable Overview Q&A, Ask the Filing, and Analyst Brief, choose one option.
 
 ### Option A: LM Studio
 
@@ -109,10 +123,24 @@ Verify with `curl http://127.0.0.1:1234/v1/models`. Keep network serving disable
 1. Install [Ollama for macOS](https://ollama.com/download) and open it.
 2. On Apple Silicon, run `ollama run gemma4:12b-mlx`. The comparable portable tag is `gemma4:12b`; smaller Macs can use `gemma4:e2b-mlx`.
 3. Type `/bye` after the initial chat. The model remains installed.
-4. Set `LOCAL_LLM_PROVIDER=ollama` if LM Studio may also be running.
+4. Set `AI_PROVIDER=ollama` if LM Studio may also be running.
 5. Verify with `curl http://127.0.0.1:11434/api/tags`.
 
 FilingLens discovers available chat-model IDs instead of guessing a filename. The first generation after changing ticker or filing evidence may be slower because the model cannot reuse the previous prompt cache. FilingLens uses a five-minute default timeout and compact prompt contexts; a smaller model will respond faster.
+
+### Option C: Ollama Cloud API
+
+1. Sign in to Ollama and create a key at [ollama.com/settings/keys](https://ollama.com/settings/keys).
+2. In the FilingLens sidebar, expand **Add Ollama Cloud API key**.
+3. Paste the key into the hidden field.
+4. Choose **Connect for this session** to keep it only in the running browser session, or **Save on this Mac** to store it in the project's ignored `.env` with owner-only permissions.
+5. Select **Ollama Cloud** and a discovered model. No restart or Terminal command is required.
+
+Advanced users may still set `OLLAMA_API_KEY` directly in `.env`, set `AI_PROVIDER=ollama_cloud` to force cloud mode, and optionally set an exact `OLLAMA_CLOUD_MODEL`.
+
+The key remains in `.env`, is added to the `Authorization: Bearer` request header, and is never displayed in the interface. When Ollama Cloud is selected, FilingLens sends the question, verified Python metrics, and selected filing passages to Ollama. Usage may consume account credits.
+
+By default, the cloud model selector shows only the models currently covered by Ollama's free usage credits: `gemma4:31b`, `gpt-oss:120b`, `gpt-oss:20b`, `nemotron-3-nano:30b`, `nemotron-3-super`, and `nemotron-3-ultra`. The selection is retained across Streamlit reruns. Enable **Show models that may require paid credits** only after adding credits or upgrading the Ollama account.
 
 ## 6. Launching FilingLens
 
@@ -142,11 +170,11 @@ For a straightforward first session:
 7. Click **Load and index latest 10-K**.
 8. Enter a question such as “What factors did management say affected revenue?”
 9. Click **Ask the filing** and inspect both the answer and each source passage.
-10. Open **Analyst Brief** and generate the report if a local provider is connected.
+10. Open **Analyst Brief** and generate the report if an AI provider is connected.
 
 ## 8. Sidebar reference
 
-The sidebar controls the active company, historical window, cache, local provider, and model.
+The sidebar controls the active company, historical window, cache, AI provider, and model.
 
 ### Ticker
 
@@ -189,19 +217,21 @@ Use it when:
 
 Do not click it repeatedly. Normal reruns should use the cache to avoid unnecessary SEC traffic.
 
-### Local AI provider and model
+### AI provider and model
 
-When one or both supported services are reachable, choose LM Studio or Ollama and then choose an available local chat model. With `LOCAL_LLM_PROVIDER=auto`, LM Studio is listed first when both are available; set the variable to force one provider.
+Choose among every available provider and model. With `AI_PROVIDER=auto`, FilingLens checks LM Studio, local Ollama, Ollama Cloud, OpenAI, and Anthropic. Set the variable to force one provider. Ollama Cloud appears only when its key authenticates and models are returned.
 
 Changing the model does not change SEC data or Python calculations. It changes only generative explanations.
 
-### Local AI status
+### AI provider status
 
 Possible states include:
 
-- **Provider: Connected - N model(s):** the local service is reachable and chat models were discovered.
-- **No configured local AI service was detected:** neither enabled endpoint could be reached.
+- **Provider: Connected - N model(s):** the service is reachable and chat models were discovered.
+- **No configured AI provider exposed an available chat model:** no local service was reachable and Ollama Cloud was not configured or available.
 - **No local chat models:** download/load a model in LM Studio or install one with Ollama.
+- **Ollama Cloud requires OLLAMA_API_KEY:** expand **Add Ollama Cloud API key** in the sidebar and connect or save the key there.
+- **Ollama Cloud did not authorize the selected model:** the account returned HTTP 402. Choose one of the free-credit models shown by default, confirm free usage remains in Ollama Usage settings, or add credits. FilingLens intentionally hides paid models unless **Show models that may require paid credits** is enabled.
 
 When offline, deterministic features continue working and the Overview model value shows **Offline**.
 
@@ -225,9 +255,9 @@ Shows the filing date of the most recent annual report found in recent SEC submi
 
 Shows the filing date of the most recent quarterly report found in recent SEC submissions.
 
-### Local model
+### AI provider and model
 
-Shows the exact selected LM Studio model ID or Ollama model tag, or **Offline**.
+Shows the selected provider and exact LM Studio/Ollama model ID, or **Offline**.
 
 ### Headline metrics
 
@@ -239,6 +269,20 @@ The latest available annual period displays:
 - **Free Cash Flow:** operating cash flow minus capital expenditures, calculated in Python.
 
 If a reliable mapping is not available, the value appears as **Unavailable**.
+
+Each headline metric also shows its latest year-over-year percentage movement when a valid prior period exists.
+
+### Ratio snapshot
+
+Shows the latest revenue growth, gross margin, operating margin, current ratio, and debt-to-equity value using percentage or multiple units as appropriate.
+
+### Recent SEC filings and flags
+
+Provides direct official links to the latest 10-K and 10-Q, including filing/report dates and accession numbers. The latest-period flag counters summarize Notable and Significant unusual-change records; they are screening signals, not misconduct findings.
+
+### Ask a general company question
+
+Enter a broad but filing-related question about the business, financial performance, liquidity, strategy, or risks. FilingLens automatically indexes the latest 10-K if necessary, retrieves relevant passages, and combines them with verified Python metrics. Answers expose the supporting SEC passages. This area is not connected to live news or market prices.
 
 ### Value provenance
 
@@ -265,53 +309,46 @@ Use provenance when a value looks surprising. Confirm the concept, period, filin
 
 ## 10. Financial Trends tab
 
-This tab provides historical charts, statements, and ratios.
+This tab provides readable multi-year statements and ratios in four subtabs: **Income Statement**, **Balance Sheet**, **Cash Flow**, and **Ratios & Growth**. Each account row includes a compact sparkline, one formatted value per fiscal year, and the latest comparable movement.
 
-### Income statement trends
+Select any main account row to open its detail panel. The panel shows the latest value, prior value, latest change, a larger interactive chart, and any reliable components or calculation inputs available to FilingLens. Use the chart toolbar to zoom, reset the axes, view fullscreen, or download a PNG.
 
-Plots available annual series for:
+Growth and return series naturally lack a value in their first displayed year because they require a prior-year comparison. FilingLens omits that missing base point from the compact sparkline while retaining the unavailable year as `—` in the table.
 
-- revenue;
-- gross profit;
-- operating income;
-- net income.
+### Income Statement
 
-Use the chart toolbar to zoom, pan, reset axes, view fullscreen, or download a PNG.
+Groups the available annual series into:
 
-### Cash flow and capital trends
+- **Revenue and gross profit:** revenue, cost of revenue, and gross profit;
+- **Operating and net income:** operating income and net income.
 
-Plots available annual series for:
+Only reliably mapped accounts are displayed. FilingLens does not manufacture missing line items to resemble a complete statement. Direct accounts such as revenue remain at the reported total when a trustworthy product or segment breakdown is not available from normalized Company Facts. Derived accounts such as gross profit and free cash flow expose their available inputs without adding separate charts for those component rows.
 
-- operating cash flow;
-- free cash flow;
-- total assets;
-- long-term debt.
+### Balance Sheet
 
-Because assets and cash flow can be different orders of magnitude, inspect the hover values and tables as well as the line shapes.
+Separates assets from liabilities and equity:
 
-### Margin trends
+- **Assets:** cash and cash equivalents, current assets, and total assets;
+- **Liabilities and equity:** current liabilities, total liabilities, long-term debt, and stockholders' equity.
 
-Plots gross, operating, and net margins as percentages.
+### Cash Flow
 
-- **Gross margin:** gross profit ÷ revenue
-- **Operating margin:** operating income ÷ revenue
-- **Net margin:** net income ÷ revenue
+Shows operating cash flow, capital expenditures, and Python-calculated free cash flow. Capital expenditures are displayed as reported by the SEC fact; free cash flow is operating cash flow minus capital expenditures.
 
-### Income Statement expander
+### Ratios & Growth
 
-Shows annual rows/columns for available revenue, cost, and profit metrics. The table can be searched, shown fullscreen, or downloaded as CSV using Streamlit's table toolbar.
+Organizes calculated metrics into four groups:
 
-### Balance Sheet expander
+- **Growth:** revenue, operating income, net income, operating cash flow, and free cash flow growth;
+- **Margins:** gross, operating, net, operating cash flow, and free cash flow margins;
+- **Returns:** return on assets and return on equity;
+- **Liquidity and leverage:** current ratio, debt to assets, and debt to equity.
 
-Shows available annual cash, asset, liability, equity, and debt values.
+Percentage metrics show their latest change in percentage points. Current ratio and debt to equity use multiples and show their latest change in `x` units.
 
-### Cash Flow expander
+### Source and interpretation
 
-Shows operating cash flow, capital expenditures, and Python-calculated free cash flow.
-
-### Ratios and growth expander
-
-Shows calculated ratios by annual period.
+All statement values come from the same normalized SEC/XBRL data used elsewhere in FilingLens. Open **Value provenance** on the Overview tab to inspect the exact concept, reporting period, filing date, and accession number behind a surprising account value.
 
 #### Growth fields
 
@@ -427,7 +464,7 @@ Insider activity is not a standalone buy or sell signal. Review the source footn
 
 ## 13. Ask the Filing tab
 
-This tab retrieves passages from the latest 10-K and optionally asks the selected local model to answer using those passages.
+This tab retrieves passages from the latest 10-K and optionally asks the selected AI model to answer using those passages.
 
 ### Evidence source
 
@@ -460,11 +497,11 @@ Avoid overly broad questions such as “Tell me everything.” Focused questions
 
 ### Ask the filing
 
-Runs a deterministic scope preflight, ranks the filing chunks, sends the top passages and verified Python metrics to the selected local model, and displays the response. The local generation request disables model reasoning so the output budget is reserved for the visible, cited answer.
+Runs a deterministic scope preflight, ranks the filing chunks, sends the top passages and verified Python metrics to the selected model, and displays the response. Generation disables model reasoning where supported so the output budget is reserved for the visible, cited answer.
 
-Clearly unrelated questions—such as weather or sports questions—and requests for future price predictions or buy/sell recommendations are stopped before local-model generation. The app labels these requests as outside the indexed filing's scope and suggests filing-related topics. This avoids spending local compute on a request that the evidence cannot support.
+Clearly unrelated questions—such as weather or sports questions—and requests for future price predictions or buy/sell recommendations are stopped before model generation. The app labels these requests as outside the indexed filing's scope and suggests filing-related topics. This avoids spending compute or cloud credits on a request that the evidence cannot support.
 
-The button is disabled when no supported local chat model is available. You can still inspect deterministic financial data while offline.
+The button is disabled when no supported chat model is available. You can still inspect deterministic financial data without AI.
 
 ### Answer
 
@@ -492,11 +529,11 @@ The Analyst Brief combines verified metrics, unusual-change records, and retriev
 ### Prerequisites
 
 - Load and index the latest 10-K in Ask the Filing.
-- Connect LM Studio or Ollama and select a chat model.
+- Connect a local or cloud AI provider and select an available text model.
 
 If either prerequisite is missing, the tab displays an explanatory message.
 
-### Generate local analyst brief
+### Generate analyst brief
 
 Creates a report with eight sections:
 
@@ -509,7 +546,7 @@ Creates a report with eight sections:
 7. Liquidity / Capital Structure
 8. Questions for Further Research
 
-Generation is local and can take several minutes depending on model size and hardware. The tested 12B model required roughly three minutes for the full report.
+Generation time depends on the selected provider. Local models may take several minutes; cloud models are normally faster but may consume plan credits.
 
 ### Download Markdown
 
@@ -538,7 +575,7 @@ This tab gives a concise explanation of:
 - Python calculations;
 - unusual-change methods;
 - TF-IDF retrieval;
-- local model grounding;
+- source-grounded AI explanations;
 - privacy and responsible use.
 
 Use it when explaining how a displayed value or AI answer was produced. More detail is available in `docs/methodology.md` and `docs/architecture.md`.
@@ -570,6 +607,15 @@ Use it when explaining how a displayed value or AI answer was produced. More det
 3. Confirm that the top passages come from Risk Factors or relevant Business/MD&A sections.
 4. Read the original SEC filing for complete context.
 
+### Create a portfolio demonstration
+
+1. Analyze two companies with different industries.
+2. Capture screenshots that do not expose private settings.
+3. Export one reviewed analyst brief.
+4. Cite the official SEC filings.
+5. Explain the deterministic-versus-generative separation.
+6. State the project's limitations honestly.
+
 ## 17. Caching and data freshness
 
 FilingLens has two cache layers:
@@ -599,9 +645,9 @@ Possible causes include internet loss, SEC maintenance, invalid automated-access
 
 The issuer may use an extension concept or a different accounting presentation. Treat the metric as unavailable and inspect the filing directly.
 
-### No configured local AI service was detected
+### No configured AI provider exposed an available chat model
 
-Start LM Studio on port `1234` or Ollama on port `11434`, then confirm the corresponding endpoint with the `curl` command in the setup section. Deterministic features remain available.
+Start LM Studio on port `1234` or Ollama on port `11434`, or add `OLLAMA_API_KEY` for Ollama Cloud. Deterministic features remain available.
 
 ### The provider exposes no chat models
 
@@ -615,13 +661,13 @@ The exact `LMSTUDIO_MODEL` value in `.env` does not match the current `/v1/model
 
 The app found no adequate filing relationship or detected a request for price predictions or buy/sell advice. Rephrase the question around the company's business, financial performance, liquidity, management discussion, or risk factors. Confirm that the correct ticker's 10-K is indexed.
 
-### The local model produced no visible answer
+### The selected model produced no visible answer
 
 This is a model-generation problem, not an out-of-scope decision. FilingLens disables reasoning/thinking for filing Q&A so the output budget is reserved for the answer. If an empty response still occurs, retry once, reduce other local-model workloads, or select another compatible chat model.
 
 ### Local model generation exceeded the configured timeout
 
-Changing tickers replaces the filing evidence, so the local provider may need to process a cold prompt instead of reusing its previous prompt cache. Wait for any earlier generation to finish, then retry. If the model is simply slow, increase `LMSTUDIO_TIMEOUT_SECONDS` or `OLLAMA_TIMEOUT_SECONDS` in `.env` and restart FilingLens, or select a smaller model. If the provider reports a context-window limit, configure at least an 8K context window; FilingLens already limits Q&A evidence and compacts anomaly records before generation.
+Changing tickers replaces the filing evidence, so the selected provider may need to process a cold prompt instead of reusing its previous prompt cache. Wait for any earlier generation to finish, then retry. If the model is simply slow, increase the corresponding `LMSTUDIO_TIMEOUT_SECONDS`, `OLLAMA_TIMEOUT_SECONDS`, or `OLLAMA_CLOUD_TIMEOUT_SECONDS` value in `.env` and restart FilingLens, or select a smaller model. If the provider reports a context-window limit, configure at least an 8K context window; FilingLens already limits Q&A evidence and compacts anomaly records before generation.
 
 ## 19. Interpreting missing data
 
@@ -641,10 +687,11 @@ Do not replace an unavailable value with an AI guess.
 
 ## 20. Privacy and security
 
-- Runtime model inference stays at the configured local LM Studio or Ollama loopback address.
+- Local model inference stays at the configured LM Studio or Ollama loopback address.
+- When Ollama Cloud is selected, the question, verified metrics, and retrieved SEC filing passages are sent to `https://ollama.com/api` using Bearer authentication.
 - The SEC contact email remains in ignored `.env` but is transmitted to SEC.gov in the required User-Agent header.
 - Streamlit usage-statistics collection is disabled in `.streamlit/config.toml`.
-- Filing text and questions are not sent to a paid cloud model by FilingLens.
+- Filing text and questions are sent to OpenAI or Anthropic only when that provider is selected. Keys are included only in authenticated requests to the selected service.
 - SEC.gov receives the public-data requests and configured User-Agent.
 - Filing text is untrusted evidence and is never allowed to override the system prompt.
 - Keep `.env` private.
@@ -691,7 +738,7 @@ Cached SEC data remains available after restart.
 | MAD | Median absolute deviation, used for robust anomaly scores |
 | Grounding | Restricting model output to supplied evidence and verified metrics |
 | LM Studio | Graphical local model server supported for generative features |
-| Ollama | Command-line-oriented local model server supported for generative features |
+| Ollama | Local model server and authenticated cloud API supported for generative features |
 
 ## 24. Final user checklist
 

@@ -8,13 +8,35 @@ import pandas as pd
 
 LABELS = {
     "revenue": "Revenue",
+    "cost_of_revenue": "Cost of revenue",
     "gross_profit": "Gross profit",
     "operating_income": "Operating income",
     "net_income": "Net income",
+    "cash": "Cash and cash equivalents",
+    "current_assets": "Current assets",
     "operating_cash_flow": "Operating cash flow",
+    "capital_expenditures": "Capital expenditures",
     "free_cash_flow": "Free cash flow",
     "total_assets": "Total assets",
+    "current_liabilities": "Current liabilities",
+    "total_liabilities": "Total liabilities",
+    "stockholders_equity": "Stockholders' equity",
     "long_term_debt": "Long-term debt",
+    "revenue_growth": "Revenue growth",
+    "operating_income_growth": "Operating income growth",
+    "net_income_growth": "Net income growth",
+    "operating_cash_flow_growth": "Operating cash flow growth",
+    "free_cash_flow_growth": "Free cash flow growth",
+    "gross_margin": "Gross margin",
+    "operating_margin": "Operating margin",
+    "net_margin": "Net margin",
+    "operating_cash_flow_margin": "Operating cash flow margin",
+    "free_cash_flow_margin": "Free cash flow margin",
+    "return_on_assets": "Return on assets",
+    "return_on_equity": "Return on equity",
+    "current_ratio": "Current ratio",
+    "debt_to_assets": "Debt to assets",
+    "debt_to_equity": "Debt to equity",
 }
 
 ANOMALY_COLOR_MODES = (
@@ -51,6 +73,47 @@ _LOWER_IS_BETTER_FRAGMENTS = (
 
 _MULTIPLE_RATIO_METRICS = {"current_ratio", "debt_to_equity"}
 
+METRIC_FORMULAS = {
+    "gross_profit": "Revenue − cost of revenue",
+    "free_cash_flow": "Operating cash flow − capital expenditures",
+    "revenue_growth": "Change in revenue ÷ absolute prior-year revenue",
+    "operating_income_growth": "Change in operating income ÷ absolute prior-year operating income",
+    "net_income_growth": "Change in net income ÷ absolute prior-year net income",
+    "operating_cash_flow_growth": "Change in operating cash flow ÷ absolute prior-year operating cash flow",
+    "free_cash_flow_growth": "Change in free cash flow ÷ absolute prior-year free cash flow",
+    "gross_margin": "Gross profit ÷ revenue",
+    "operating_margin": "Operating income ÷ revenue",
+    "net_margin": "Net income ÷ revenue",
+    "operating_cash_flow_margin": "Operating cash flow ÷ revenue",
+    "free_cash_flow_margin": "Free cash flow ÷ revenue",
+    "return_on_assets": "Net income ÷ average total assets",
+    "return_on_equity": "Net income ÷ average stockholders' equity",
+    "current_ratio": "Current assets ÷ current liabilities",
+    "debt_to_assets": "Long-term debt ÷ total assets",
+    "debt_to_equity": "Long-term debt ÷ stockholders' equity",
+}
+
+_FORMULA_COMPONENTS = {
+    "gross_profit": ("revenue", "cost_of_revenue"),
+    "free_cash_flow": ("operating_cash_flow", "capital_expenditures"),
+    "gross_margin": ("gross_profit", "revenue"),
+    "operating_margin": ("operating_income", "revenue"),
+    "net_margin": ("net_income", "revenue"),
+    "operating_cash_flow_margin": ("operating_cash_flow", "revenue"),
+    "free_cash_flow_margin": ("free_cash_flow", "revenue"),
+    "current_ratio": ("current_assets", "current_liabilities"),
+    "debt_to_assets": ("long_term_debt", "total_assets"),
+    "debt_to_equity": ("long_term_debt", "stockholders_equity"),
+}
+
+_GROWTH_SOURCES = {
+    "revenue_growth": "revenue",
+    "operating_income_growth": "operating_income",
+    "net_income_growth": "net_income",
+    "operating_cash_flow_growth": "operating_cash_flow",
+    "free_cash_flow_growth": "free_cash_flow",
+}
+
 AI_SESSION_KEYS = (
     "retrieval",
     "sections",
@@ -60,6 +123,8 @@ AI_SESSION_KEYS = (
     "analyst_brief_key",
     "insider_activity",
     "insider_activity_key",
+    "overview_answer",
+    "overview_answer_key",
 )
 
 
@@ -72,6 +137,173 @@ def human_currency(value: float | int | None) -> str:
         if absolute >= divisor:
             return f"{sign}${absolute / divisor:,.2f}{suffix}"
     return f"{sign}${absolute:,.0f}"
+
+
+def period_delta(frame: pd.DataFrame, metric: str) -> str | None:
+    """Format the latest year-over-year movement for a headline metric."""
+    if metric not in frame or len(frame.index) < 2:
+        return None
+    series = pd.to_numeric(frame[metric], errors="coerce").dropna()
+    if len(series) < 2:
+        return None
+    prior = float(series.iloc[-2])
+    current = float(series.iloc[-1])
+    if prior == 0:
+        return None
+    change = (current - prior) / abs(prior)
+    return f"{change:+.1%} vs FY{int(series.index[-2])}"
+
+
+def ratio_display(metric: str, value: float | int | None) -> str:
+    """Format a ratio snapshot using either percentage or multiple units."""
+    if value is None or pd.isna(value):
+        return "Unavailable"
+    numeric = float(value)
+    if metric in _MULTIPLE_RATIO_METRICS:
+        return f"{numeric:.2f}x"
+    return f"{numeric:.1%}"
+
+
+def metric_display_value(
+    metric: str, value: float | int | None, *, ratio: bool = False
+) -> str:
+    """Format one statement or ratio value for a human-readable trend table."""
+    if value is None or pd.isna(value):
+        return "—"
+    if ratio:
+        return ratio_display(metric, value)
+    return human_currency(value)
+
+
+def metric_latest_change(
+    frame: pd.DataFrame, metric: str, *, ratio: bool = False
+) -> str:
+    """Describe the latest comparable movement using the metric's natural unit."""
+    if metric not in frame.columns:
+        return "—"
+    series = pd.to_numeric(frame[metric], errors="coerce").dropna()
+    if len(series) < 2:
+        return "—"
+    prior = float(series.iloc[-2])
+    current = float(series.iloc[-1])
+    if ratio:
+        difference = current - prior
+        if metric in _MULTIPLE_RATIO_METRICS:
+            return f"{difference:+.2f}x"
+        return f"{difference * 100:+.1f} pp"
+    if prior == 0:
+        return "—"
+    return f"{(current - prior) / abs(prior):+.1%}"
+
+
+def metric_trend_table(
+    frame: pd.DataFrame, metrics: list[str] | tuple[str, ...], *, ratio: bool = False
+) -> pd.DataFrame:
+    """Create account rows with sparklines, readable annual values, and latest movement."""
+    year_columns = [f"FY{int(year)}" for year in frame.index]
+    columns = ["_metric", "Account", "Trend", *year_columns, "Latest change"]
+    if frame.empty:
+        return pd.DataFrame(columns=columns)
+
+    rows: list[dict[str, object]] = []
+    for metric in metrics:
+        if metric not in frame.columns:
+            continue
+        numeric = pd.to_numeric(frame[metric], errors="coerce")
+        if not numeric.notna().any():
+            continue
+        row: dict[str, object] = {
+            "_metric": metric,
+            "Account": LABELS.get(metric, metric.replace("_", " ").title()),
+            # LineChartColumn displays its raw fallback value when an array starts
+            # with null. Growth and return series naturally have an unavailable
+            # first year, so omit missing points from the compact sparkline.
+            "Trend": [float(value) for value in numeric if pd.notna(value)],
+            "Latest change": metric_latest_change(frame, metric, ratio=ratio),
+        }
+        for year, value in numeric.items():
+            row[f"FY{int(year)}"] = metric_display_value(metric, value, ratio=ratio)
+        rows.append(row)
+    return pd.DataFrame(rows, columns=columns)
+
+
+def metric_component_table(
+    financials: pd.DataFrame, metric: str, fiscal_year: int
+) -> pd.DataFrame:
+    """Return transparent inputs for derived accounts and ratios when available."""
+    columns = ["Component", f"FY{int(fiscal_year)} value"]
+    if financials.empty or fiscal_year not in financials.index:
+        return pd.DataFrame(columns=columns)
+
+    rows: list[dict[str, str]] = []
+
+    def add_component(label: str, value: float | int | None) -> None:
+        if value is not None and not pd.isna(value):
+            rows.append(
+                {
+                    "Component": label,
+                    f"FY{int(fiscal_year)} value": human_currency(value),
+                }
+            )
+
+    if metric in _FORMULA_COMPONENTS:
+        for component in _FORMULA_COMPONENTS[metric]:
+            value = (
+                financials.loc[fiscal_year, component]
+                if component in financials.columns
+                else None
+            )
+            label = LABELS.get(component, component.replace("_", " ").title())
+            if metric in {"gross_profit", "free_cash_flow"} and component in {
+                "cost_of_revenue",
+                "capital_expenditures",
+            }:
+                label = f"Less: {label}"
+            add_component(label, value)
+    elif metric in _GROWTH_SOURCES:
+        source = _GROWTH_SOURCES[metric]
+        source_series = (
+            pd.to_numeric(financials[source], errors="coerce").dropna()
+            if source in financials.columns
+            else pd.Series(dtype=float)
+        )
+        if fiscal_year in source_series.index:
+            position = list(source_series.index).index(fiscal_year)
+            add_component(
+                f"Current {LABELS.get(source, source)}", source_series.loc[fiscal_year]
+            )
+            if position > 0:
+                prior_year = int(source_series.index[position - 1])
+                add_component(
+                    f"Prior {LABELS.get(source, source)} (FY{prior_year})",
+                    source_series.iloc[position - 1],
+                )
+    elif metric in {"return_on_assets", "return_on_equity"}:
+        denominator = (
+            "total_assets" if metric == "return_on_assets" else "stockholders_equity"
+        )
+        add_component(
+            "Net income",
+            financials.loc[fiscal_year, "net_income"]
+            if "net_income" in financials.columns
+            else None,
+        )
+        denominator_series = (
+            pd.to_numeric(financials[denominator], errors="coerce")
+            if denominator in financials.columns
+            else pd.Series(dtype=float)
+        )
+        if fiscal_year in denominator_series.index:
+            location = list(denominator_series.index).index(fiscal_year)
+            if location > 0:
+                prior = denominator_series.iloc[location - 1]
+                current = denominator_series.loc[fiscal_year]
+                if pd.notna(prior) and pd.notna(current):
+                    add_component(
+                        f"Average {LABELS.get(denominator, denominator).lower()}",
+                        (float(prior) + float(current)) / 2,
+                    )
+    return pd.DataFrame(rows, columns=columns)
 
 
 def anomaly_change_presentation(
