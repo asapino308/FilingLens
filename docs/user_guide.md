@@ -1,6 +1,6 @@
 # FilingLens User Guide
 
-This guide documents the original Streamlit interface. For the new Mac app that opens without Terminal, use the [FilingLens desktop user guide](desktop_app.md). The Streamlit version remains available during the desktop rollout.
+This guide documents the original Streamlit interface. For the ready-to-open Apple Silicon Mac download, including the required macOS **Open Anyway** steps for the current unnotarized build, use the [FilingLens desktop user guide](desktop_app.md#download-and-open-the-mac-app). The Streamlit version remains available.
 
 > **Responsible-use notice:** FilingLens is educational financial-analysis software. It is not investment advice, an audit opinion, or a fraud-detection system.
 

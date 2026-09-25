@@ -4,9 +4,11 @@ FilingLens is a local-first Mac research app that combines official SEC EDGAR da
 
 ## New Mac app
 
-The desktop build appears at `desktop/src-tauri/target/release/bundle/macos/FilingLens.app` after building. FilingLens starts a private Python service automatically and keeps the SEC cache under `~/Library/Application Support/FilingLens/cache`. A fresh download contains no user's settings, SEC cache, or AI key. On first launch, enter your own SEC contact in Settings; optional cloud AI keys are stored in macOS Keychain. Your later research and preferences stay on your device. First startup can take several seconds while the service starts.
+Download the Apple Silicon Mac app from [GitHub Releases](https://github.com/asapino308/FilingLens/releases). It runs on macOS 14 or newer and includes its own Python service; users do not need to install Python, Node, or Rust. Follow the [Mac download and first-launch instructions](docs/desktop_app.md#download-and-open-the-mac-app) before opening it.
 
-Local builds are unsigned until the release is code signed and notarized. The Streamlit source interface remains available separately.
+**Current release:** the app has an ad hoc code signature but has not been verified or notarized by Apple. macOS will warn when it is downloaded. The guide explains Apple's **Open Anyway** flow. Only allow the app after downloading it from this repository's release page; do not bypass a warning that says the app contains malware or has been damaged.
+
+FilingLens starts a private Python service automatically and keeps the SEC cache under `~/Library/Application Support/FilingLens/cache`. A fresh download contains no user's settings, SEC cache, or AI key. On first launch, enter your own SEC contact in Settings; optional cloud AI keys are stored in macOS Keychain. Your later research and preferences stay on your device. First startup can take several seconds while the service starts. SEC data does not require an API key.
 
 The [desktop user guide](docs/desktop_app.md) explains every workspace area. To rebuild on an Apple Silicon Mac with Python, Node, and Rust installed, run `./scripts/build_desktop_macos.sh`, quit FilingLens, and replace the installed app with the new build. Daily use requires only opening the `.app`. A local AI server must still be running if you choose LM Studio or local Ollama; deterministic financial research works without AI.
 
@@ -60,7 +62,7 @@ See [docs/architecture.md](docs/architecture.md) for module-level detail.
 
 Python 3.11+, pandas, NumPy, HTTPX, Beautiful Soup, lxml, Streamlit, Plotly, FastAPI, Tauri, React, python-dotenv, pytest, official SEC EDGAR endpoints, and LM Studio/Ollama APIs.
 
-## Mac quick start
+## Mac source setup
 
 ### Prerequisites
 

@@ -1,6 +1,6 @@
 # FilingLens setup on macOS
 
-This is the shortest supported path from a GitHub download to a working FilingLens installation. The deterministic financial-analysis features do not require AI. LM Studio, local Ollama, Ollama Cloud, OpenAI, or Anthropic can optionally power the question and brief features.
+This guide is for installing the **Streamlit source interface** from GitHub. To download the ready-to-open Apple Silicon Mac app, use the [desktop download and first-launch guide](desktop_app.md#download-and-open-the-mac-app). The deterministic financial-analysis features do not require AI. LM Studio, local Ollama, Ollama Cloud, OpenAI, or Anthropic can optionally power the question and brief features.
 
 ## 1. Check the Mac
 

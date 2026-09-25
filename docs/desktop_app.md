@@ -2,21 +2,27 @@
 
 The Mac app opens FilingLens as a normal application. Use it to review SEC financial statements, read filings, investigate unusual movements and insider transactions, and ask optional AI questions that cite filing passages. The numbers come from SEC data and Python calculations; the AI model does not create the financial values. This is educational software, not investment advice.
 
-## Open the app
+## Download and open the Mac app
 
-1. In Finder, open **Applications** in your home folder and double-click **FilingLens.app**.
-2. Developers can find a local build under `desktop/src-tauri/target/release/bundle/macos`.
-3. Allow a little time on the first launch while the bundled local service starts. You do not need to run a command or visit a local web address.
+The current ZIP is for **Apple Silicon (M-series) Macs running macOS 14 or newer**. It has an ad hoc code signature and has **not** been notarized by Apple. Mac users therefore need to approve this specific download manually. It does not require an Apple Developer account, Terminal, Python, Node, or Rust on the user's Mac.
 
-Developer builds may be unsigned. A public release must be code signed and notarized before distribution. The original `Launch FilingLens.command` still starts the Streamlit source interface if you need it.
+1. From the [FilingLens GitHub Releases page](https://github.com/asapino308/FilingLens/releases), download `FilingLens-0.2.0-macOS-arm64.zip` under **Assets**. Do not download a copy from an unrelated site.
+2. In Finder, double-click the ZIP. Move **FilingLens.app** into **Applications** (Finder > Go > Applications).
+3. Double-click **FilingLens.app**. Because Apple has not notarized this build, macOS may say it **cannot check the app for malicious software** or **cannot verify the developer**. Dismiss that alert without moving the app to Trash.
+4. Open **Apple menu > System Settings > Privacy & Security**. Scroll to **Security** and find the blocked FilingLens app. Depending on your macOS version, click **Open** or **Open Anyway**, then confirm the follow-up **Open Anyway/Open** prompt. Enter your Mac login password if asked. Apple says **Open Anyway** is available for about one hour after the first blocked launch; if it is missing, try opening FilingLens again and return to this screen.
+5. Wait a few seconds for the window and bundled local service. No browser address or command is needed.
 
-On the first packaged launch, FilingLens opens Settings so you can enter your own SEC contact. The download has no saved research or AI key. After use, your SEC cache and preferences remain under `Library/Application Support/FilingLens`, and optional cloud AI keys remain in your macOS Keychain. The app does not import settings or cache from a source checkout.
+Only use **Open Anyway** if you trust the ZIP from this repository's release page. If macOS says the app **contains malware**, **is damaged**, or its contents **have been modified**, stop and report the issue instead of overriding the warning. Apple's [guide to opening an unverified app](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac) explains the controls, and its [app safety guidance](https://support.apple.com/102445) explains what the warnings mean.
+
+FilingLens needs network access to download public SEC filings and to contact a cloud AI provider only when you select one. Normal research does not require Full Disk Access or access to your documents. If macOS asks for Keychain access while you save a cloud AI key, confirm that you initiated the save in FilingLens before allowing it. The original `Launch FilingLens.command` remains available for people building the Streamlit source interface.
+
+On the first packaged launch, FilingLens opens Settings so you can enter your own SEC contact. The download has no saved research or AI key. After use, your SEC cache and preferences remain under `~/Library/Application Support/FilingLens`, and optional cloud AI keys remain in your macOS Keychain. The app does not import settings or cache from a source checkout. Reinstalling on the same Mac account preserves data saved by earlier use; it is not a data-reset operation.
 
 ## Start with a company
 
 Use the search field at the upper left to enter a ticker or company name. Select a suggestion, or enter a ticker and press Return. The current ticker appears at the top right. **Historical periods** changes the annual comparison window from three to ten years. The refresh button beside the ticker checks the SEC again for the selected company; otherwise FilingLens reuses its local cache. Source notes show when the Company Facts cache was updated.
 
-Enter a name and contact email in **SEC User-Agent** on first launch, then save. The SEC public-data APIs do not require an API key; they ask automated clients to identify themselves in a request header. The contact address is sent to SEC.gov and is not displayed to other app users.
+Enter a name and monitored contact email in **SEC User-Agent** on first launch, for example `FilingLens/1.0 Researcher name@example.com`, then save. The SEC public-data APIs do not require an API key; they ask automated clients to identify themselves in a request header. The contact address is sent to SEC.gov and is not displayed to other app users. FilingLens limits request speed and caches responses on your Mac.
 
 ## What each workspace area does
 
