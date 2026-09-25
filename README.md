@@ -26,7 +26,7 @@ Financial filings contain both structured accounting data and qualitative manage
 - Economic year-over-year and median-absolute-deviation anomaly screens
 - Optional magnitude-aware anomaly coloring with full, unclipped explanations
 - Safe HTML cleanup, best-effort filing section detection, overlapping chunks, and local TF-IDF retrieval
-- Automatic LM Studio, local Ollama, and Ollama Cloud discovery, model selection, grounded Q&A, citations, and analyst brief export
+- Optional LM Studio, local Ollama, Ollama Cloud, OpenAI, and Anthropic connections for grounded Q&A, citations, and analyst brief export
 - Expanded Overview with year-over-year deltas, ratio snapshot, direct filing links, latest anomaly counts, and general company Q&A
 - Local research approaches (Explore, Evaluate, Follow), saved companies, guided filing questions, and a source-linked comparison with the last company check
 - Latest 10-Q reading and grounded Q&A, a separate quarterly financial snapshot, and analyst briefs citing both recent 10-K and 10-Q evidence when available
@@ -71,7 +71,7 @@ The following setup, `.env` file, sidebar controls, and `localhost:8501` address
 - An Apple Silicon Mac running macOS 14 or newer is the recommended setup.
 - Python 3.11 or newer. Check with `python3 --version`; install from [python.org](https://www.python.org/downloads/macos/) or Homebrew if needed.
 - Internet access for installation and first-time SEC downloads.
-- At least 16 GB of memory is recommended for the 12B local-model path. Smaller models can be used on lower-memory systems.
+- Local AI memory needs depend on the model you choose; SEC research works without a local model.
 
 Clone the repository and run the setup helper:
 
@@ -247,7 +247,7 @@ Filing Q&A, Overview Q&A, and the longer analyst brief disable model thinking/re
 
 `src/filinglens/evaluation/qa_eval.py` contains 20 reusable questions across direct retrieval, MD&A reasoning, risks, metric interpretation, and deliberately unsupported requests. Deterministic checks cover citation presence and insufficient-evidence language. `benchmark.py` can repeat the same questions across selected models and records model ID, category, answer, citation behavior, latency, and output length.
 
-Current live checks are reported in [docs/evaluation.md](docs/evaluation.md). They are smoke tests, not a statistically conclusive model benchmark.
+Earlier live checks are reported in [docs/evaluation.md](docs/evaluation.md). They are smoke tests, not a statistically conclusive model benchmark.
 
 ## Privacy
 
@@ -267,7 +267,7 @@ The unit suite uses fixtures and HTTP mocks rather than repeatedly contacting th
 - Period labels use the observation end year; non-calendar retail fiscal years may need issuer-calendar refinement.
 - Section extraction is heuristic because SEC HTML varies widely.
 - TF-IDF captures lexical relevance, not deep semantic similarity.
-- Five annual periods provide limited statistical power; anomaly flags require human context.
+- Short annual histories provide limited statistical power; anomaly flags require human context.
 - FilingLens does not reconcile every restatement, dimension, acquisition, or segment context.
 - Local generation latency depends heavily on model size and hardware.
 - Generated explanations may still be incomplete or wrong; inspect cited evidence and verified metrics.
