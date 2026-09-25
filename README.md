@@ -280,10 +280,15 @@ FilingLens is educational software, not investment advice, an audit, or a fraud-
 
 The highest-value next improvement is an issuer-aware fiscal calendar and XBRL reconciliation layer that can distinguish total debt components, restated contexts, and fiscal-year labels across non-calendar filers. After that, risk-factor change comparison and locally hosted semantic embeddings would be useful extensions.
 
-## Interface preview
+## Mac app preview
 
-The Streamlit interface provides seven tabs—Overview, Financial Trends, Anomaly Analysis, Insider Activity, Ask the Filing, Analyst Brief, and Methodology—with provenance tables, official Form 4 ownership transactions, and expandable filing evidence.
+The current Mac interface is shown below with public Apple filings. These screenshots were captured from v0.2.0; no contact details or API keys are visible.
 
-![FilingLens overview](docs/images/filinglens-overview.png)
+![FilingLens Mac app overview showing the Apple research workspace](docs/images/filinglens-desktop-overview.png)
 
-![FilingLens financial trends](docs/images/filinglens-trends.png)
+<details>
+<summary>See the financial statements view</summary>
+
+![FilingLens Mac app financials showing annual SEC figures for Apple](docs/images/filinglens-desktop-financials.png)
+
+</details>
