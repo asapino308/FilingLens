@@ -21,4 +21,6 @@
 
 ### Distribution
 
+A read-only DMG now provides a drag-to-Applications shortcut and installation instructions. The ZIP remains available, and both contain the same 0.3.0 application.
+
 Apple Silicon, macOS 14 or later. Preview build with an ad hoc signature; not notarized by Apple. Follow the first-launch instructions in the desktop guide. Existing app data is preserved when replacing the application.
