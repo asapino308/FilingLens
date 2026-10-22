@@ -14,7 +14,7 @@
 ### Security and privacy
 
 - Restrict the optional Streamlit source interface to 127.0.0.1 in configuration, launcher, and documented commands. Previously its default listener could expose credential-backed operations to reachable network clients. The native Mac API already used loopback and a per-launch token.
-- Raise security minimums for certifi, Pillow and urllib3; update the development pytest requirement and release-build pip. The reviewed release environment has no known Python advisories; production JavaScript audit is clean. RustSec reports no security vulnerabilities; maintenance notices and a Linux-only GLib unsoundness warning remain in the cross-platform lockfile. The withdrawn yoke-derive version was updated.
+- Raise security minimums for certifi, Pillow and urllib3; update the development pytest requirement and release-build pip. The reviewed release environment has no known Python advisories; the full JavaScript audit, including development tools, is clean after updating Vite and source-map-js. RustSec reports no security vulnerabilities; maintenance notices and a Linux-only GLib unsoundness warning remain in the cross-platform lockfile. The withdrawn yoke-derive version was updated.
 - Constrain investigation export to a fixed application folder, safe Markdown basenames, a 2 MB limit, and a unique new file.
 - Clarify model-discovery network requests, trusted provider endpoint overrides, and separate locations for cache, reviews, exports, and keys.
 - Package from committed source in a fresh staging folder and check the exact download for personal settings, cache, key paths, and developer paths.
