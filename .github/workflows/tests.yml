@@ -35,8 +35,9 @@ jobs:
           cache: npm
           cache-dependency-path: desktop/package-lock.json
       - run: npm ci
+      - run: node --test tests/*.test.mjs
       - run: npm run build
       - run: npm audit --omit=dev --audit-level=moderate
       - run: mkdir -p src-tauri/binaries && touch "src-tauri/binaries/filinglens-api-$(rustc -vV | awk '/^host:/ {print $2}')"
-      - run: cargo check --locked
+      - run: cargo test --locked
         working-directory: desktop/src-tauri

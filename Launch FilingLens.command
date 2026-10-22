@@ -44,7 +44,7 @@ echo "Keep this window open while using the application."
 echo "Press Control+C here when you want to stop FilingLens."
 echo
 
-".venv/bin/python" -m streamlit run app.py
+".venv/bin/python" -m streamlit run app.py --server.address=127.0.0.1
 exit_code=$?
 
 if (( exit_code != 0 )); then

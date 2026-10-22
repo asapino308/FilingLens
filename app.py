@@ -38,7 +38,7 @@ from filinglens.sec.companies import CompanyDirectory
 from filinglens.sec.insiders import fetch_insider_activity
 from filinglens.sec.submissions import latest_filing
 from filinglens.sec.xbrl import select_annual_facts
-from filinglens.ui.charts import account_trend_chart
+from filinglens.ui.charts import account_trend_chart, comparison_chart
 from filinglens.ui.components import (
     ANOMALY_COLOR_MODES,
     LABELS,
@@ -770,6 +770,31 @@ with tabs[1]:
                 ratio=True,
                 component_frame=financials,
             )
+
+        st.divider()
+        st.subheader("Build a financial graph")
+        st.caption("Choose up to five annual variables. Hover over a year to read the values together. Dollar values, percentages, and multiples use separate scales.")
+        chart_unit = st.selectbox("Graph unit", ["Dollar values", "Percentages", "Multiples"], key="comparison_unit")
+        if chart_unit == "Dollar values":
+            chart_frame, unit = financials, "usd"
+        elif chart_unit == "Percentages":
+            chart_frame, unit = ratios.drop(columns=["current_ratio", "debt_to_equity"], errors="ignore"), "percent"
+        else:
+            chart_frame, unit = ratios[[metric for metric in ["current_ratio", "debt_to_equity"] if metric in ratios]], "multiple"
+        options = [metric for metric in chart_frame.columns if pd.to_numeric(chart_frame[metric], errors="coerce").notna().any()]
+        defaults = [metric for metric in (["revenue", "net_income"] if unit == "usd" else ["revenue_growth", "gross_margin"] if unit == "percent" else ["current_ratio", "debt_to_equity"]) if metric in options]
+        selected = st.multiselect(
+            "Variables", options, default=defaults, max_selections=5,
+            format_func=lambda metric: LABELS.get(metric, metric.replace("_", " ").title()),
+            key=f"comparison_metrics_{company.ticker}_{unit}",
+        )
+        if selected:
+            st.plotly_chart(
+                comparison_chart(chart_frame, selected, unit=unit, labels=LABELS),
+                width="stretch", key=f"comparison_chart_{company.ticker}_{unit}",
+            )
+        else:
+            st.info("Select a variable to draw a graph.")
 
 with tabs[2]:
     st.caption(

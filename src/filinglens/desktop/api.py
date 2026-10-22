@@ -12,7 +12,7 @@ import threading
 import time
 from typing import Literal
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
@@ -46,6 +46,12 @@ class SettingsUpdate(BaseModel):
     remove_openai_api_key: bool = False
     anthropic_api_key: str | None = None
     remove_anthropic_api_key: bool = False
+
+
+class PeerRequest(BaseModel):
+    tickers: list[str] = Field(min_length=2, max_length=4)
+    years: int = Field(default=5, ge=3, le=10)
+    year: int | None = Field(default=None, ge=1990, le=2100)
 
 
 def create_app(service: ResearchService | None = None, token: str | None = None) -> FastAPI:
@@ -102,6 +108,24 @@ def create_app(service: ResearchService | None = None, token: str | None = None)
     @app.get("/api/company/{ticker}/provenance")
     def provenance(ticker: str, years: int = 5):
         return research.provenance(ticker, years)
+
+    @app.get("/api/company/{ticker}/history")
+    def history(ticker: str, years: int = 5):
+        return research.history(ticker, years)
+
+    @app.get("/api/company/{ticker}/evidence")
+    def evidence(ticker: str, metric: str = Query(min_length=1, max_length=80),
+                 period: int = Query(ge=1990, le=2100), years: int = Query(default=5, ge=3, le=10),
+                 include_passages: bool = False):
+        return research.evidence(ticker, metric, period, years, include_passages)
+
+    @app.get("/api/company/{ticker}/quarters")
+    def quarters(ticker: str, years: int = 5):
+        return research.quarters(ticker, years)
+
+    @app.post("/api/peers")
+    def peers(payload: PeerRequest):
+        return research.peers(payload.tickers, payload.years, payload.year)
 
     @app.get("/api/company/{ticker}/composition")
     def composition(ticker: str, form: Literal["10-K", "10-Q"] = "10-Q", years: int = 5):

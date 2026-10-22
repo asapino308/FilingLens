@@ -39,6 +39,27 @@ export type Anomaly = {
   severity: string; method: string; explanation: string;
   impact_direction: string; raw_direction: string; impact_signed: number | null;
 };
+export type EvidenceObservation = {
+  id: string; metric: string; label: string; year: number; value: number | null; display: string;
+  origin: "reported" | "calculated" | "unavailable"; formula: string | null;
+  source: { concept: string; accession: string; filed: string; form: string; url: string | null;
+    start: string | null; end: string; unit: string } | null;
+  inputs: EvidenceObservation[];
+};
+export type EvidenceMovement = {
+  id: string; metric: string; label: string; prior: EvidenceObservation; current: EvidenceObservation;
+  absolute_change: number | null; change_display: string; percentage_change: number | null;
+};
+export type EvidencePassage = {
+  id: string; section: string; text: string; url: string; form: string; filed: string; accession: string;
+};
+export type EvidenceTrailData = {
+  id: string; ticker: string; metric: string; period: number; prior_period: number;
+  severity: string; method: string; movement: EvidenceMovement; related: EvidenceMovement[];
+  notices: string[]; query: string; passages: EvidencePassage[]; filings: Filing[];
+  passage_status: "not_requested" | "available" | "partial" | "unavailable" | "no_matches";
+  passage_issues: string[];
+};
 export type CompanyData = {
   company: { ticker: string; name: string; cik: string };
   latest_year: number | null;

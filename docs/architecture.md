@@ -38,7 +38,7 @@ Filing text is untrusted external input. It never becomes a system message or ap
 
 ### Language layer
 
-`filinglens.documents` cleans, sections, chunks, and ranks filing text locally. `filinglens.llm` exposes a common contract for LM Studio, local Ollama, Ollama Cloud, OpenAI, and Anthropic. `grounded_qa.py` combines only top-ranked evidence and verified metrics. The system prompt rejects document instructions, unsupported claims, invented citations, and personalized investment advice. Local providers receive traffic only on loopback; selecting a cloud provider sends the bounded prompt to its authenticated API.
+`filinglens.documents` cleans, sections, chunks, and ranks filing text locally. `filinglens.llm` exposes a common contract for LM Studio, local Ollama, Ollama Cloud, OpenAI, and Anthropic. `grounded_qa.py` combines only top-ranked evidence and verified metrics. The system prompt rejects document instructions, unsupported claims, invented citations, and personalized investment advice. Local providers default to loopback; trusted environment settings can override their addresses; selecting a cloud provider sends the bounded prompt to its authenticated API.
 
 ## Module responsibilities
 
@@ -52,6 +52,7 @@ Filing text is untrusted external input. It never becomes a system message or ap
 | `analytics/normalize.py` | Long-to-wide financial structures and FCF |
 | `analytics/ratios.py` | Authoritative ratios and growth |
 | `analytics/anomalies.py` | Economic and MAD-based unusual-change screens |
+| `analytics/evidence.py` | Exact annual comparison context, recursive calculation inputs, source receipts, and versioned evidence-trail identity |
 | `documents/*` | Parsing, sectioning, chunking, TF-IDF retrieval |
 | `llm/base.py` | Replaceable provider contract |
 | `llm/lmstudio.py` | Discovery, health, local generation, offline errors |
@@ -62,6 +63,8 @@ Filing text is untrusted external input. It never becomes a system message or ap
 | `reporting/export.py` | Safe Markdown-to-HTML export |
 | `app.py` | Streamlit orchestration and user-facing errors |
 | `desktop/src` | React company workspace, statements, filings, signals, and settings |
+| `desktop/src/EvidenceTrail.tsx` | Accessible anomaly investigation dialog, filing leads, user judgments, evidence attachments, and Markdown export |
+| `desktop/src/evidenceReviews.ts` | Versioned local review persistence isolated by exact source context |
 | `desktop/src-tauri` | Mac window, private sidecar launch, and native external links |
 | `filinglens/desktop/service.py` | Shared desktop research data and AI orchestration |
 | `filinglens/desktop/api.py` | Local JSON API and request validation |
@@ -78,3 +81,11 @@ The on-disk SEC cache survives Streamlit reruns and is ignored by Git. Streamlit
 - An empty retrieval result returns an insufficient-evidence response without calling the model.
 - Provider discovery or generation errors affect only AI-assisted features.
 - Export escapes HTML from model output.
+
+## Anomaly evidence trails
+
+`GET /api/company/{ticker}/evidence?metric=...&period=...` uses the same financial and ratio frames as the annual movement screen. It follows the detector's previous nonmissing observation, explicitly identifies missing-year gaps, and recursively includes source facts for derived metrics. Ratio changes use percentage points or multiples as appropriate. Trail identities include the numerical observations and their provenance, preventing old judgments from being applied silently to revised facts.
+
+The optional `include_passages=true` reads up to three matching annual filings through the shared accession-scoped retriever. Matching prefers the selected observation's source accession, then its exact reporting end date; it never silently substitutes the latest unrelated annual filing. Results are filtered for metric-specific language, management discussion is prioritized, and substantially overlapping chunks are suppressed. Missing documents or retrieval failures leave the numeric trail intact. The bounded search is neither exhaustive disclosure analysis nor citation-entailment verification.
+
+The feature does not invoke any model. User-authored hypotheses, judgments, notes, and attached evidence snapshots live in local website storage, keyed by source-specific trail ID. Storage failures are visible; Markdown export provides a portable copy. The Mac `export_investigation` command writes only a size-bounded Markdown file with a validated basename and unique suffix under the app's own data directory (`exports/`); it accepts no user-supplied destination path and never overwrites a previous export. `show_investigation_exports` opens that fixed folder in Finder. This avoids native webview Blob-download failures. Browser development sessions retain normal downloads. Local reviews are not a server database or a synchronized backup.

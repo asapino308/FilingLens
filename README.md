@@ -4,13 +4,15 @@ FilingLens is a local-first Mac research app that combines official SEC EDGAR da
 
 ## Download the Mac app
 
-Download the current [FilingLens 0.2.0 preview](https://github.com/asapino308/FilingLens/releases/tag/v0.2.0) for Apple Silicon (M-series) Macs running macOS 14 or newer. The download includes its own Python service; users do not need to install Python, Node, or Rust. Follow the [Mac download and first-launch instructions](docs/desktop_app.md#download-and-open-the-mac-app) before opening it.
+Download the current [FilingLens 0.3.0 preview](https://github.com/asapino308/FilingLens/releases/tag/v0.3.0) for Apple Silicon (M-series) Macs running macOS 14 or newer. The download includes its own Python service; users do not need to install Python, Node, or Rust. Follow the [Mac download and first-launch instructions](docs/desktop_app.md#download-and-open-the-mac-app) before opening it.
 
 **Current release:** the app has an ad hoc code signature but has not been verified or notarized by Apple. macOS may warn when it is downloaded. The guide explains Apple's **Open Anyway** flow. Only allow the app after downloading it from this repository's release page; do not bypass a warning that says the app contains malware or has been damaged.
 
 FilingLens starts a private Python service automatically and keeps the SEC cache under `~/Library/Application Support/FilingLens/cache`. A fresh download contains no user's settings, SEC cache, or AI key. On first launch, enter your own SEC contact in Settings; optional cloud AI keys are stored in macOS Keychain. Your later research and preferences stay on your device. First startup can take several seconds while the service starts. SEC data does not require an API key.
 
 The [desktop user guide](docs/desktop_app.md) explains every workspace area. A local AI server must be running if you choose LM Studio or local Ollama; SEC research and calculated financial analysis work without AI. Source setup is below for developers.
+
+See [what changed in 0.3.0](CHANGELOG.md) for the evidence-trail workflow, historical research tools, and security updates.
 
 ## Project motivation
 
@@ -30,6 +32,11 @@ Financial filings contain both structured accounting data and qualitative manage
 - Expanded Overview with year-over-year deltas, ratio snapshot, direct filing links, latest anomaly counts, and general company Q&A
 - Local research approaches (Explore, Evaluate, Follow), saved companies, guided filing questions, and a source-linked comparison with the last company check
 - Latest 10-Q reading and grounded Q&A, a separate quarterly financial snapshot, and analyst briefs citing both recent 10-K and 10-Q evidence when available
+- Anomaly evidence trails with exact comparison inputs and SEC sources, related movements, period-matched filing passages, and locally saved user hypotheses and judgments; no AI model required
+- Accounting Time Machine with multi-year and single-year views, a reported-value revision timeline, original SEC links, and recalculated effects on cash flow, growth, and margins
+- Standalone quarterly income, cash-flow and quarter-end balance history, with source-inspectable TTM totals when four contiguous quarters are available
+- Two-to-four-company annual peer comparison using a shared reporting end-year, exact fiscal dates, comparable calculation inputs, and source links
+- Gentle workspace, topic, and year transitions that respect reduced-motion preferences
 - Graceful no-LLM mode: all deterministic and retrieval features remain usable
 - A 20-question evaluation set and optional cross-model benchmark runner
 
@@ -174,7 +181,7 @@ In the Mac app, open **Settings**, paste an OpenAI or Anthropic API key, and sav
 ## Launch the Streamlit source interface
 
 ```bash
-.venv/bin/python -m streamlit run app.py
+.venv/bin/python -m streamlit run app.py --server.address=127.0.0.1
 ```
 
 Then open `http://localhost:8501`.
@@ -241,7 +248,7 @@ SEC HTML is cleaned of active elements, segmented using recognized 10-K/10-Q hea
 
 FilingLens discovers exact model IDs from the selected provider instead of guessing them. Its prompt treats retrieved text as untrusted evidence, requires `[Source N]` citations, refuses unsupported claims, and distinguishes management commentary from Python calculations. Verified metrics are serialized into the model context; the model explains them but is not authoritative for their calculation.
 
-Filing Q&A, Overview Q&A, and the longer analyst brief disable model thinking/reasoning where supported so output budgets are reserved for visible answers. A conservative deterministic preflight rejects clearly unrelated questions and requests for price predictions or buy/sell advice before model generation. Local providers use loopback endpoints; Ollama Cloud uses the authenticated `https://ollama.com/api` endpoint.
+Filing Q&A, Overview Q&A, and the longer analyst brief disable model thinking/reasoning where supported so output budgets are reserved for visible answers. A conservative deterministic preflight rejects clearly unrelated questions and requests for price predictions or buy/sell advice before model generation. Local providers default to loopback endpoints, with trusted environment overrides; Ollama Cloud uses the authenticated `https://ollama.com/api` endpoint.
 
 ## AI evaluation
 
@@ -251,7 +258,7 @@ Earlier live checks are reported in [docs/evaluation.md](docs/evaluation.md). Th
 
 ## Privacy
 
-The application contacts SEC.gov for public filings and financial facts. Local inference stays on the selected loopback LM Studio or Ollama service. When a cloud provider is selected, FilingLens sends the question, verified metrics, and retrieved filing passages to that provider's authenticated API. The local `.env`, SEC cache, model files, and generated reports are excluded from Git. Streamlit usage telemetry is disabled in the committed configuration.
+The application contacts SEC.gov for public filings and financial facts. Local inference stays on the selected loopback LM Studio or Ollama service. When a cloud provider is selected, FilingLens sends the question, verified metrics, and retrieved filing passages to that provider's authenticated API. The local `.env`, SEC cache, model files, and generated reports are excluded from Git. Configured cloud providers may also receive authenticated model-discovery requests at startup or when availability is refreshed. Local provider URLs default to loopback and allow trusted environment overrides. Streamlit usage telemetry is disabled in the committed configuration.
 
 ## Testing
 

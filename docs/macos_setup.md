@@ -117,7 +117,7 @@ FilingLens uses Ollama's native `/api/chat` endpoint with `think=false` for comp
 
 ```bash
 .venv/bin/python scripts/doctor.py
-.venv/bin/python -m streamlit run app.py
+.venv/bin/python -m streamlit run app.py --server.address=127.0.0.1
 ```
 
 Open the displayed address, normally `http://localhost:8501`. You can also double-click `Launch FilingLens.command` after setup. Stop the terminal launch with `Control+C`.

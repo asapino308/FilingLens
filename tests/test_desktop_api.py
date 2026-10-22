@@ -46,6 +46,7 @@ def test_native_window_preflight_is_allowed_but_data_still_requires_token() -> N
 
 def test_cloud_keys_are_saved_without_being_returned(monkeypatch, tmp_path) -> None:
     saved = {}
+    monkeypatch.setattr(api_module, "read_cloud_key", lambda: "")
     monkeypatch.setenv("FILINGLENS_ENV_FILE", str(tmp_path / ".env"))
     monkeypatch.setattr(api_module, "read_api_key", lambda provider: saved.get(provider, ""))
     monkeypatch.setattr(api_module, "save_api_key", lambda provider, value: saved.__setitem__(provider, value))

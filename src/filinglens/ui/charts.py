@@ -7,7 +7,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 
-COLORS = ["#0B4F6C", "#01BAEF", "#6C8EAD", "#F4A261", "#2A9D8F"]
+COLORS = ["#176F93", "#C05348", "#3D8C64", "#A4662F", "#805CA1"]
 
 
 def account_trend_chart(
@@ -57,6 +57,44 @@ def account_trend_chart(
             "zerolinecolor": "#9CA3AF",
         },
         hovermode="x unified",
+        hoverlabel={"bgcolor": "#FFFFFF", "bordercolor": "#2A9D8F", "font": {"color": "#243D3D", "size": 13}},
+    )
+    return figure
+
+
+def comparison_chart(
+    frame: pd.DataFrame, metrics: list[str], *, unit: str, labels: dict[str, str] | None = None
+) -> go.Figure:
+    """Compare annual metrics sharing one unit without inventing missing values."""
+    figure = go.Figure()
+    for index, metric in enumerate(metrics):
+        if metric not in frame:
+            continue
+        series = pd.to_numeric(frame[metric], errors="coerce")
+        if series.notna().sum() == 0:
+            continue
+        values = series * 100 if unit == "percent" else series
+        suffix = "%" if unit == "percent" else "x" if unit == "multiple" else ""
+        number = "%{y:,.1f}" if unit == "percent" else "%{y:,.2f}" if unit == "multiple" else "$%{y:,.0f}"
+        figure.add_trace(go.Scatter(
+            x=[int(year) for year in series.index],
+            y=values,
+            mode="lines+markers",
+            name=(labels or {}).get(metric, metric),
+            connectgaps=False,
+            line={"color": COLORS[index % len(COLORS)], "width": 3},
+            marker={"size": 9, "line": {"color": "#FFFFFF", "width": 2}},
+            hovertemplate=f"{(labels or {}).get(metric, metric)}: {number}{suffix}<extra></extra>",
+        ))
+    figure.update_layout(
+        template="plotly_white",
+        height=410,
+        margin={"l": 35, "r": 15, "t": 30, "b": 45},
+        legend={"orientation": "h", "y": -0.25, "title": ""},
+        xaxis={"title": "Fiscal year", "dtick": 1, "showgrid": False},
+        yaxis={"title": "USD" if unit == "usd" else "Percent" if unit == "percent" else "Multiple", "tickformat": "~s" if unit == "usd" else ".1f", "ticksuffix": "%" if unit == "percent" else "x" if unit == "multiple" else "", "zerolinecolor": "#9CA3AF"},
+        hovermode="x unified",
+        hoverlabel={"bgcolor": "#FFFFFF", "bordercolor": "#2A9D8F", "font": {"color": "#243D3D", "size": 13}},
     )
     return figure
 
