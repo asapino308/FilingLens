@@ -86,6 +86,7 @@ def add_table(document, rows: list[list[str]]) -> None:
     table.columns[0].width = Inches(2.08)
     table.columns[1].width = Inches(4.82)
     for row_index, row in enumerate(rows):
+        table.rows[row_index]._tr.get_or_add_trPr().append(OxmlElement("w:cantSplit"))
         for column, value in enumerate(row):
             cell = table.cell(row_index, column)
             cell.width = Inches(2.08 if column == 0 else 4.82)

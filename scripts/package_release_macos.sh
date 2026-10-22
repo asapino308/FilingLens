@@ -40,3 +40,9 @@ ditto -c -k --sequesterRsrc --keepParent "$app" "$archive"
 shasum -a 256 "$archive"
 echo "Ad hoc signed, unnotarized Mac build: $archive"
 echo "Public download requires clear manual Open Anyway instructions; do not describe this build as Apple verified."
+
+if command -v uv >/dev/null 2>&1; then
+  "$project_dir/scripts/package_dmg_macos.sh" "$app" "$output_dir"
+else
+  echo "ZIP ready. Install uv and run scripts/package_dmg_macos.sh to also create a DMG."
+fi

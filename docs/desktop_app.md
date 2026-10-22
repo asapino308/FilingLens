@@ -4,15 +4,17 @@ The Mac app opens FilingLens as a normal application. Use it to review SEC finan
 
 ## Download and open the Mac app
 
-The current ZIP is for **Apple Silicon (M-series) Macs running macOS 14 or newer**. It has an ad hoc code signature and has **not** been notarized by Apple. Mac users therefore need to approve this specific download manually. It does not require an Apple Developer account, Terminal, Python, Node, or Rust on the user's Mac.
+The current DMG and ZIP are for **Apple Silicon (M-series) Macs running macOS 14 or newer**. It has an ad hoc code signature and has **not** been notarized by Apple. Mac users therefore need to approve this specific download manually. It does not require an Apple Developer account, Terminal, Python, Node, or Rust on the user's Mac.
 
-1. From the [FilingLens GitHub Releases page](https://github.com/asapino308/FilingLens/releases), download `FilingLens-0.3.0-macOS-arm64.zip` under **Assets**. Do not download a copy from an unrelated site.
-2. In Finder, double-click the ZIP. Move **FilingLens.app** into **Applications** (Finder > Go > Applications).
-3. Double-click **FilingLens.app**. Because Apple has not notarized this build, macOS may say it **cannot check the app for malicious software** or **cannot verify the developer**. Dismiss that alert without moving the app to Trash.
+1. From the [FilingLens GitHub Releases page](https://github.com/asapino308/FilingLens/releases), download `FilingLens-0.3.0-macOS-arm64.dmg` under **Assets**. Do not download a copy from an unrelated site.
+2. Open the DMG and drag **FilingLens.app** onto the **Applications** shortcut. Quit any older FilingLens app first and confirm **Replace** if updating. Eject the disk image after copying.
+3. Open **FilingLens.app** from Applications. Because Apple has not notarized this build, macOS may say it **cannot check the app for malicious software** or **cannot verify the developer**. Dismiss that alert without moving the app to Trash.
 4. Open **Apple menu > System Settings > Privacy & Security**. Scroll to **Security** and find the blocked FilingLens app. Depending on your macOS version, click **Open** or **Open Anyway**, then confirm the follow-up **Open Anyway/Open** prompt. Enter your Mac login password if asked. Apple says **Open Anyway** is available for about one hour after the first blocked launch; if it is missing, try opening FilingLens again and return to this screen.
 5. Wait a few seconds for the window and bundled local service. No browser address or command is needed.
 
-Only use **Open Anyway** if you trust the ZIP from this repository's release page. If macOS says the app **contains malware**, **is damaged**, or its contents **have been modified**, stop and report the issue instead of overriding the warning. Apple's [guide to opening an unverified app](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac) explains the controls, and its [app safety guidance](https://support.apple.com/102445) explains what the warnings mean.
+Only use **Open Anyway** if you trust the download from this repository's release page. If macOS says the app **contains malware**, **is damaged**, or its contents **have been modified**, stop and report the issue instead of overriding the warning. Apple's [guide to opening an unverified app](https://support.apple.com/guide/mac-help/open-a-mac-app-from-an-unknown-developer-mh40616/mac) explains the controls, and its [app safety guidance](https://support.apple.com/102445) explains what the warnings mean.
+
+The ZIP remains available as an alternative: unzip it and move **FilingLens.app** into Applications. The DMG contains the same verified app; it does not install a background service or remove the first-launch approval requirement.
 
 FilingLens needs network access to download public SEC filings and to discover models from configured cloud providers; generation sends research only to the selected provider. Normal research does not require Full Disk Access or access to your documents. If macOS asks for Keychain access while you save a cloud AI key, confirm that you initiated the save in FilingLens before allowing it. The original `Launch FilingLens.command` remains available for people building the Streamlit source interface.
 
@@ -118,3 +120,7 @@ SEC files are public and downloaded from SEC.gov. The Mac app listens only on yo
 ## Storage and provider discovery
 
 SEC cache and service settings are stored under `~/Library/Application Support/FilingLens`. Saved research approaches and investigation reviews use the app webview’s local storage. Markdown investigations are written under `~/Library/Application Support/com.filinglens.desktop/exports`. Saved cloud keys use macOS Keychain; trusted process environment settings can also provide a key. Configured cloud providers may receive authenticated model-discovery requests at startup or when availability is refreshed. Questions and filing evidence are sent only when you request generation using that provider. Local provider addresses default to loopback and can be overridden by trusted environment settings.
+
+## Build a disk image
+
+Release maintainers can run `./scripts/package_dmg_macos.sh /path/to/FilingLens.app release` on macOS with `uv` installed. The helper verifies the existing app signature, uses pinned dmgbuild 1.6.7 for a read-only image with an Applications shortcut, and verifies the image checksum. It packages the existing app without changing its code signature. The clean release helper creates both ZIP and DMG when uv is available. Signing and Apple notarization remain separate steps.

@@ -1,0 +1,18 @@
+Install FilingLens
+
+Requires an Apple Silicon (M-series) Mac running macOS 14 or newer.
+
+1. Quit any older FilingLens app.
+2. Drag FilingLens.app onto the Applications shortcut in this window.
+3. If replacing an older version, confirm Replace. Your existing app data stays on this Mac.
+4. Eject the FilingLens disk image, then open FilingLens from Applications.
+
+This preview is ad hoc signed and has not been notarized or verified by Apple.
+If macOS cannot verify the developer, dismiss the first alert and use System Settings > Privacy & Security > Open Anyway, then confirm Open. Only approve the app downloaded from the official release below. Do not override a malware or damaged-app warning.
+
+On first launch, enter your own SEC contact in Settings. AI is optional; no Python, Node, Rust or paid API key is needed for SEC research. Local AI requires a separate model service. Each user supplies any optional cloud key.
+
+Official releases: https://github.com/asapino308/FilingLens/releases
+Guide: https://github.com/asapino308/FilingLens/blob/main/docs/desktop_app.md
+
+The DMG provides drag-and-drop installation. It does not run an installer script, install a background service or require a restart.

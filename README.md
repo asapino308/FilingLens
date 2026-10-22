@@ -4,7 +4,7 @@ FilingLens is a local-first Mac research app that combines official SEC EDGAR da
 
 ## Download the Mac app
 
-Download the current [FilingLens 0.3.0 preview](https://github.com/asapino308/FilingLens/releases/tag/v0.3.0) for Apple Silicon (M-series) Macs running macOS 14 or newer. The download includes its own Python service; users do not need to install Python, Node, or Rust. Follow the [Mac download and first-launch instructions](docs/desktop_app.md#download-and-open-the-mac-app) before opening it.
+Download the current [FilingLens 0.3.0 preview](https://github.com/asapino308/FilingLens/releases/tag/v0.3.0) for Apple Silicon (M-series) Macs running macOS 14 or newer. Choose `FilingLens-0.3.0-macOS-arm64.dmg`, open it, drag FilingLens into Applications, then eject the disk image. A ZIP is also available. The download includes its own Python service; users do not need to install Python, Node, or Rust. Follow the [Mac download and first-launch instructions](docs/desktop_app.md#download-and-open-the-mac-app) before opening it.
 
 **Current release:** the app has an ad hoc code signature but has not been verified or notarized by Apple. macOS may warn when it is downloaded. The guide explains Apple's **Open Anyway** flow. Only allow the app after downloading it from this repository's release page; do not bypass a warning that says the app contains malware or has been damaged.
 
