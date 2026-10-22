@@ -11,7 +11,7 @@
     "tauri:build": "tauri build"
   },
   "dependencies": {
-    "@tauri-apps/api": "^2.0.0",
+    "@tauri-apps/api": "^2.12.4",
     "@tauri-apps/plugin-opener": "^2.0.0",
     "lucide-react": "^0.468.0",
     "react": "^19.0.0",
