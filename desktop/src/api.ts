@@ -9,19 +9,21 @@ function getConnection(): Promise<Connection> {
       if ("__TAURI_INTERNALS__" in window) {
         const info = await invoke<{ port: number; token: string }>("backend_info");
         const resolved = { base: `http://127.0.0.1:${info.port}`, token: info.token };
-        for (let attempt = 0; attempt < 300; attempt++) {
+        let lastFailure = "";
+        for (let attempt = 0; attempt < 60; attempt++) {
           try {
-            const health = await fetch(`${resolved.base}/api/health`, { headers: { "X-FilingLens-Token": resolved.token } });
+            const health = await fetch(`${resolved.base}/api/health`, { headers: { "X-FilingLens-Token": resolved.token }, signal: AbortSignal.timeout(2000) });
             if (health.ok) return resolved;
-          } catch { /* bundled service is still starting */ }
+            lastFailure = `Local service returned ${health.status}.`;
+          } catch (error) { lastFailure = error instanceof Error ? error.message : String(error); }
           await new Promise(done => setTimeout(done, 500));
         }
-        throw new Error("The FilingLens local service did not start. Reopen the app, or use the previous Streamlit version while troubleshooting.");
+        throw new Error(`Could not connect to the FilingLens local service. Reopen the app to retry. ${lastFailure}`);
       }
       return { base: "", token: "" };
     })();
   }
-  return connection;
+  return connection.catch(error => { connection = null; throw error; });
 }
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {

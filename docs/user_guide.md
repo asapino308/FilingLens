@@ -148,7 +148,7 @@ From the project directory:
 
 ```bash
 .venv/bin/python scripts/doctor.py
-.venv/bin/python -m streamlit run app.py
+.venv/bin/python -m streamlit run app.py --server.address=127.0.0.1
 ```
 
 Open the displayed local address, normally:
@@ -715,7 +715,7 @@ To restart:
 
 ```bash
 cd /path/to/FilingLens
-.venv/bin/python -m streamlit run app.py
+.venv/bin/python -m streamlit run app.py --server.address=127.0.0.1
 ```
 
 Cached SEC data remains available after restart.

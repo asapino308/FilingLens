@@ -6,6 +6,7 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 import hashlib
 import math
+import re
 import threading
 import time
 from typing import Any
@@ -13,8 +14,10 @@ from typing import Any
 import pandas as pd
 
 from filinglens.analytics.anomalies import detect_anomalies
+from filinglens.analytics.evidence import build_evidence_trail
 from filinglens.analytics.normalize import financials_wide
 from filinglens.analytics.ratios import calculate_ratios
+from filinglens.analytics.history import annual_peer, quarterly_history, revision_history
 from filinglens.config import Settings
 from filinglens.documents.chunking import chunk_sections
 from filinglens.documents.parser import clean_filing_html
@@ -136,6 +139,7 @@ class ResearchService:
         ratios = calculate_ratios(financials)
         anomalies = detect_anomalies(pd.concat([financials, ratios], axis=1))
         bundle = {"company": company, "submissions": submissions, "facts": facts,
+                  "company_facts": company_facts,
                   "quarterly_facts": quarterly_facts,
                   "financials": financials, "ratios": ratios, "anomalies": anomalies,
                   "facts_cached_at": facts_cached_at}
@@ -277,6 +281,119 @@ class ResearchService:
         return [{key: (None if pd.isna(value) else value) for key, value in row.items()}
                 for row in facts.to_dict("records")]
 
+    def evidence(self, ticker: str, metric: str, period: int, years: int = 5,
+                 include_passages: bool = False) -> dict[str, Any]:
+        bundle = self._load(ticker, years)
+        trail = build_evidence_trail(bundle, metric, period, self._filing_urls(bundle))
+        if not include_passages:
+            return trail
+
+        def leaves(observation):
+            if observation["source"]:
+                yield observation["source"]
+            for item in observation["inputs"]:
+                yield from leaves(item)
+
+        # Read the actual source filings for the selected observation, not an
+        # unrelated latest 10-K. Later comparative facts remain labeled as such.
+        sources = list(leaves(trail["movement"]["current"]))
+        wanted = {source["accession"] for source in sources}
+        ends = {source["end"] for source in sources}
+        available = parse_recent_filings(bundle["submissions"], ("10-K", "10-K/A"))
+        selected = [filing for filing in available if filing.accession_number in wanted]
+        if not selected and ends:
+            selected = [filing for filing in available if filing.report_date in ends]
+        # A missing older document is explicit. Do not silently substitute the
+        # latest filing, which could tell an entirely different period's story.
+        if not selected:
+            trail["passage_status"] = "unavailable"
+            trail["passage_issues"].append("No matching annual document was found in the loaded filing history. The linked source facts remain available above.")
+            return trail
+        candidates = []
+        for filing in selected[:3]:
+            trail["filings"].append(self._filing(filing))
+            try:
+                retriever, _ = self._retriever_for_filing(bundle, filing)
+                hits = retriever.search(trail["query"], top_k=60)
+                for hit in hits:
+                    text = " ".join(hit.chunk.text.lower().split())
+                    if not any(anchor in text for anchor in trail["passage_anchors"]):
+                        continue
+                    # A hedge-accounting policy can mention "operating
+                    # activities" without discussing cash generation at all.
+                    cash_metric = metric in {"operating_cash_flow", "operating_cash_flow_growth", "operating_cash_flow_margin"}
+                    if cash_metric and not re.search(r"net cash|cash (?:generated|provided|used)|operating cash|cash from operations", text):
+                        continue
+                    candidates.append(hit)
+            except (SECClientError, ValueError):
+                trail["passage_issues"].append(f"Could not read the {filing.form} filed {filing.filing_date}. Try finding passages again, or open its SEC source.")
+        # Suppress near-identical overlapping windows so the short docket adds
+        # distinct evidence. Ranking is lexical relevance, never support strength.
+        chosen = []
+        def passage_rank(hit):
+            section = hit.chunk.section.lower()
+            management_discussion = "discussion" in section or "md&a" in section
+            return management_discussion, hit.score
+
+        for hit in sorted(candidates, key=passage_rank, reverse=True):
+            words = set(hit.chunk.text.lower().split())
+            if any(len(words & old) / max(1, min(len(words), len(old))) > .8 for old in chosen):
+                continue
+            chosen.append(words)
+            chunk = hit.chunk
+            trail["passages"].append({"id": chunk.chunk_id, "section": chunk.section,
+                                      "text": chunk.text, "url": chunk.source_url,
+                                      "form": chunk.filing_form, "filed": chunk.filing_date,
+                                      "accession": chunk.accession_number})
+            if len(trail["passages"]) == 3:
+                break
+        trail["passage_status"] = ("partial" if trail["passage_issues"] else
+                                   "available" if trail["passages"] else "no_matches")
+        if trail["passages"] and not any(passage_rank(hit)[0] for hit in candidates):
+            trail["passage_issues"].append("No matching management-discussion passage was found. The retrieved financial-statement passages provide accounting context, not a verified management explanation.")
+        return trail
+
+    @staticmethod
+    def _filing_urls(bundle: dict[str, Any]) -> dict[str, str]:
+        return {filing.accession_number: filing.source_url for filing in parse_recent_filings(
+            bundle["submissions"], ("10-K", "10-K/A", "10-Q", "10-Q/A"))}
+
+    def history(self, ticker: str, years: int = 5) -> dict[str, Any]:
+        bundle = self._load(ticker, years)
+        return {"company": asdict(bundle["company"]),
+                **revision_history(bundle["company_facts"], self._filing_urls(bundle), years)}
+
+    def quarters(self, ticker: str, years: int = 5) -> dict[str, Any]:
+        bundle = self._load(ticker, years)
+        return {"company": asdict(bundle["company"]),
+                **quarterly_history(bundle["company_facts"], self._filing_urls(bundle), years)}
+
+    def peers(self, tickers: list[str], years: int = 5, year: int | None = None) -> dict[str, Any]:
+        symbols = list(dict.fromkeys(normalize_ticker(ticker) for ticker in tickers))
+        if not 2 <= len(symbols) <= 4:
+            raise ValueError("Compare two to four distinct tickers.")
+        histories, errors = [], []
+        for symbol in symbols:
+            try:
+                bundle = self._load(symbol, years)
+                history = revision_history(bundle["company_facts"], self._filing_urls(bundle), years + 1)
+                histories.append({"company": asdict(bundle["company"]), "series": history["series"]})
+            except (ValueError, SECClientError) as exc:
+                errors.append({"ticker": symbol, "message": str(exc)})
+        year_sets = [{row["year"] for row in history["series"] if row["metric"] == "revenue"}
+                     for history in histories]
+        common = sorted(set.intersection(*year_sets), reverse=True)[:years] if len(year_sets) >= 2 else []
+        selected = year if year is not None else (common[0] if common else None)
+        if year is not None and year not in common:
+            raise ValueError("Choose a reporting end-year available for all loaded peers.")
+        companies = []
+        if selected is not None:
+            for history in histories:
+                row = annual_peer(history["series"], selected)
+                if row is not None:
+                    companies.append({"company": history["company"], **row})
+        return {"years": common, "year": selected, "companies": companies, "errors": errors}
+
     def composition(self, ticker: str, form: str = "10-Q", years: int = 5) -> dict[str, Any]:
         if form not in {"10-K", "10-Q"}:
             raise ValueError("Choose a 10-K or 10-Q filing.")
@@ -327,10 +444,14 @@ class ResearchService:
         filing = latest_filing(bundle["submissions"], form)
         if filing is None:
             raise ValueError(f"No recent {form} is available for this company.")
+        retriever, sections = self._retriever_for_filing(bundle, filing)
+        return retriever, sections, filing
+
+    def _retriever_for_filing(self, bundle: dict[str, Any], filing: Any) -> tuple[LocalRetriever, dict[str, str]]:
         with self._lock:
             cached = self._retrieval_cache.get(filing.accession_number)
             if cached:
-                return *cached, filing
+                return cached
         settings = Settings.from_env()
         with SECClient(settings.sec_user_agent, settings.cache_dir,
                        min_interval=settings.request_interval_seconds,
@@ -344,7 +465,7 @@ class ResearchService:
         retriever = LocalRetriever(chunks)
         with self._lock:
             self._retrieval_cache[filing.accession_number] = (retriever, sections)
-        return retriever, sections, filing
+        return retriever, sections
 
     def filing(self, ticker: str, years: int = 5, form: str = "10-K") -> dict[str, Any]:
         retriever, sections, filing = self._retriever(self._load(ticker, years), form)

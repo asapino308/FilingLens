@@ -20,7 +20,17 @@ The desktop app also selects facts tied to the exact accession and report date o
 
 The long table includes ticker, company name, CIK, form, accession, filing date, fiscal year label, fiscal period, start, end, normalized metric, value, unit, and XBRL concept. A pandas pivot creates one row per annual period for analytics and presentation.
 
-## Calculations
+## Reported-value history, quarterly history, and peers
+
+`analytics/history.py` retains finite USD Company Facts observations from Forms 10-K, 10-K/A, 10-Q, and 10-Q/A. The Time Machine uses annual durations of 300–450 days and annual-filed instants. Comparisons require identical metric, preferred concept, unit, and start/end dates. Conflicting values within one filing/context, or contradictory values in different accessions on the same filing date, are not ordered into a revision trail. Consecutive identical values are grouped while preserving the last observation date/link; A→B→A remains two changes. Source links use known primary documents or validated accession index URLs.
+
+First/latest calculation consequences use exact-period component matches. Prior-year growth additionally requires adjacent annual periods and the same concept. Each input is selected independently from the observations retained today, so these comparisons are not synchronized historical snapshots. Reclassifications, accounting-scope changes, and true error corrections cannot be distinguished from the values alone.
+
+Quarterly history prefers reported durations of 70–110 days. Where available, a longer duration is differenced against the unique preceding observation sharing the same concept and fiscal start, leaving a 70–110-day quarter. This includes annual less nine-month values for Q4. Only matching quarter boundaries are combined into derived metrics. TTM requires four exactly contiguous quarters spanning 335–400 days and complete inputs using the same source concepts across all four quarters for each summed metric; balance-sheet instants are never summed. Contradictory same-date quarterly duration or balance-sheet observations are omitted rather than ordered by accession. Every derivation retains its raw source operands. Growth-impact cards also require adjacent annual periods with duration differences of no more than ten days. Fiscal dates, including non-calendar and 53-week reporting years, are displayed explicitly rather than inferred from the filing's `fy` metadata.
+
+Peer comparisons select a shared calendar reporting end-year across at least two successfully loaded companies, with actual start/end dates shown. Within each company, all duration inputs must match revenue's exact period; instant inputs must match its end date. Revenue growth requires a comparable adjacent prior annual period with the same concept and a duration difference of no more than ten days. Long-term debt/assets uses the existing mapped long-term debt definition. Missing or incompatible inputs do not produce calculated values. Shared end-years do not establish full economic or accounting comparability across companies.
+
+## Standard annual calculations
 
 Growth uses `(current - prior) / abs(prior)` so direction remains meaningful after a negative comparison period. Margins divide profit or cash flow by revenue. Return on assets and return on equity use the average of beginning and ending balances. Liquidity and leverage formulas follow the README. Free cash flow is operating cash flow less capital expenditures.
 

@@ -2,6 +2,7 @@ import { ArrowUpRight, ChevronDown, ChevronRight, Database, ExternalLink as Exte
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useState } from "react";
 import type { MetricRow, MetricValue } from "./types";
+import { FinancialChart, metricUnit } from "./FinancialChart";
 
 export function External({ href, children, className = "" }: { href: string; children: React.ReactNode; className?: string }) {
   let safe = false;
@@ -22,34 +23,29 @@ export function External({ href, children, className = "" }: { href: string; chi
   return <a href={href} target="_blank" rel="noopener noreferrer" className={className} onClick={open}>{children}<ExternalIcon size={13} aria-hidden="true" /></a>;
 }
 
-function chartPoints(values: MetricValue[], width: number, height: number) {
-  const valid = values.filter((entry): entry is MetricValue & { value: number } => entry.value !== null);
-  if (!valid.length) return "";
-  const min = Math.min(...valid.map(entry => entry.value));
-  const max = Math.max(...valid.map(entry => entry.value));
-  const spread = max - min || 1;
-  const pad = 10;
-  return valid.map((entry) => {
-    const index = values.indexOf(entry);
-    const x = pad + (values.length === 1 ? 0.5 : index / (values.length - 1)) * (width - pad * 2);
-    const y = pad + (1 - (entry.value - min) / spread) * (height - pad * 2);
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
-}
-
 export function Sparkline({ values }: { values: MetricValue[] }) {
-  const available = values.filter(item => item.value !== null);
+  const available = values.filter((item): item is MetricValue & { value: number } => item.value !== null && Number.isFinite(item.value));
   if (available.length < 2) return <span className="muted">—</span>;
-  return <svg className="sparkline" viewBox="0 0 96 30" role="img" aria-label="Annual trend sparkline"><polyline points={chartPoints(values, 96, 30)} fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" /></svg>;
+  const min = Math.min(...available.map(item => item.value));
+  const spread = Math.max(...available.map(item => item.value)) - min || 1;
+  const points = values.map((item, index) => item.value === null ? null : {
+    item, x: 6 + index / (values.length - 1) * 84, y: 5 + (1 - (item.value - min) / spread) * 20,
+  });
+  const segments: string[] = [];
+  let segment: string[] = [];
+  for (const point of points) {
+    if (point) segment.push(`${point.x},${point.y}`);
+    else { if (segment.length > 1) segments.push(segment.join(" ")); segment = []; }
+  }
+  if (segment.length > 1) segments.push(segment.join(" "));
+  return <svg className="sparkline" viewBox="0 0 96 30" role="img" aria-label="Annual trend sparkline; open row for an interactive chart">{segments.map((coordinates, index) => <polyline key={index} points={coordinates} fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round" />)}{points.filter(point => point !== null).map(point => <circle key={point.item.year} cx={point.x} cy={point.y} r="3.2" fill="#fff" stroke="currentColor" strokeWidth="1.6"><title>{`FY${point.item.year}: ${point.item.display}`}</title></circle>)}</svg>;
 }
 
-export function TrendChart({ values, label }: { values: MetricValue[]; label: string }) {
+export function TrendChart({ row }: { row: MetricRow }) {
+  const { values, label } = row;
   const available = values.filter(item => item.value !== null);
-  if (available.length < 2) return <div className="empty-chart">At least two reported values are needed for a trend.</div>;
-  return <div className="trend-chart" role="img" aria-label={`${label} annual trend`}>
-    <svg viewBox="0 0 520 174" preserveAspectRatio="none"><line x1="10" x2="510" y1="144" y2="144" className="chart-axis"/><polyline points={chartPoints(values, 520, 150)} fill="none" stroke="currentColor" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" /></svg>
-    <div className="trend-axis">{values.map(item => <span key={item.year}>FY{item.year}</span>)}</div>
-  </div>;
+  if (!available.length) return <div className="empty-chart">No reported values are available for this trend.</div>;
+  return <FinancialChart series={[row]} unit={metricUnit(row)} label={label}/>;
 }
 
 export function StatementTable({ title, rows }: { title: string; rows: MetricRow[] }) {
@@ -64,7 +60,7 @@ export function StatementTable({ title, rows }: { title: string; rows: MetricRow
         {row.values.map(item => <span className="value-cell" key={item.year}>{item.display}</span>)}
         <span className="change-cell">{row.latest_change}</span>
       </button>{expanded === row.id && <div className="metric-detail">
-        <div className="detail-chart"><div className="eyebrow">Annual series</div><TrendChart values={row.values} label={row.label}/></div>
+        <div className="detail-chart"><div className="eyebrow">Annual series · hover a dot or focus a year</div><TrendChart row={row}/></div>
         <div className="detail-notes"><div className="eyebrow">Understand this account</div>
           {row.formula && <p><strong>Formula:</strong> {row.formula}</p>}
           {row.components.length ? <><p className="small-title">Latest-year composition</p>{row.components.map((component, index) => <div className="component-line" key={index}>{Object.values(component).map((value, part) => <span key={part}>{value}</span>)}</div>)}</> : <p className="muted">No reliable lower-level breakdown is available. The reported total is not estimated.</p>}
@@ -76,7 +72,7 @@ export function StatementTable({ title, rows }: { title: string; rows: MetricRow
 }
 
 export function SectionHeader({ eyebrow, title, description, aside }: { eyebrow: string; title: string; description: string; aside?: React.ReactNode }) {
-  return <div className="section-header"><div><div className="eyebrow">{eyebrow}</div><h2>{title}</h2><p>{description}</p></div>{aside}</div>;
+  return <div className="section-header"><div><div className="eyebrow">{eyebrow}</div><h2 tabIndex={-1}>{title}</h2><p>{description}</p></div>{aside}</div>;
 }
 
 export function FactCard({ label, value, note, icon }: { label: string; value: string | number; note?: string | null; icon?: React.ReactNode }) {
